@@ -12,61 +12,393 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 // ---- STATE ----
-let contacts = [];
-let currentContactId = null;
-let editingContactId = null;
-
-// ---- DOM REFS ----
-const viewList    = document.getElementById('view-list');
-const viewDetail  = document.getElementById('view-detail');
-const searchInput = document.getElementById('search-input');
-const filterPipeline = document.getElementById('filter-pipeline');
-const filterTag   = document.getElementById('filter-tag');
-const contactsTbody = document.getElementById('contacts-tbody');
-const modalOverlay  = document.getElementById('modal-overlay');
-const contactForm   = document.getElementById('contact-form');
+let contacts       = [];
+let companies      = [];
+let tags           = [];
+let currentContactId  = null;
+let editingContactId  = null;
+let editingCompanyId  = null;
 
 // ---- VIEW SWITCHING ----
 function showView(id) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.nav-btn:not(.primary)').forEach(b => b.classList.remove('active'));
+    const navMap = {
+        'view-list':      'btn-nav-contacts',
+        'view-detail':    'btn-nav-contacts',
+        'view-companies': 'btn-nav-companies'
+    };
+    const navId = navMap[id];
+    if (navId) document.getElementById(navId).classList.add('active');
 }
 
-// ---- LOAD CONTACTS ----
+// ---- MODAL HELPERS ----
+function openModal(id) {
+    document.getElementById(id).classList.remove('hidden');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+
+// Close modal buttons (generic via data-modal attribute)
+document.querySelectorAll('.modal-close-btn, [data-modal]').forEach(btn => {
+    btn.addEventListener('click', () => closeModal(btn.dataset.modal));
+});
+
+// Close on backdrop click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+        if (e.target === overlay) closeModal(overlay.id);
+    });
+});
+
+// ========================================================
+// TAGS
+// ========================================================
+
+async function loadTags() {
+    const snap = await db.collection('tags').orderBy('name').get();
+    tags = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+function populateTagFilter() {
+    const sel = document.getElementById('filter-tag');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">All Tags</option>';
+    tags.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.name;
+        opt.textContent = t.name;
+        if (t.name === current) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+function renderTagCheckboxes(selectedTags = []) {
+    const container = document.getElementById('tag-checkboxes');
+    if (tags.length === 0) {
+        container.innerHTML = '<span class="no-tags-msg">No tags yet — create one below</span>';
+        return;
+    }
+    container.innerHTML = tags.map(t => {
+        const checked = selectedTags.includes(t.name);
+        return `
+            <label class="tag-check-item ${checked ? 'checked' : ''}" id="tag-item-${t.id}">
+                <input type="checkbox" value="${escHtml(t.name)}" ${checked ? 'checked' : ''}
+                    onchange="toggleTagCheckStyle('${t.id}', this)">
+                ${escHtml(t.name)}
+            </label>`;
+    }).join('');
+}
+
+function toggleTagCheckStyle(tagId, checkbox) {
+    const label = document.getElementById('tag-item-' + tagId);
+    if (label) label.classList.toggle('checked', checkbox.checked);
+}
+
+function getCheckedTags() {
+    return Array.from(document.querySelectorAll('#tag-checkboxes input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+}
+
+async function createTag(name) {
+    name = name.trim();
+    if (!name) return;
+    if (tags.some(t => t.name.toLowerCase() === name.toLowerCase())) {
+        alert(`Tag "${name}" already exists.`);
+        return;
+    }
+    await db.collection('tags').add({ name });
+    await loadTags();
+}
+
+// ---- Manage Tags Modal ----
+function renderTagsModal() {
+    const list = document.getElementById('tags-list');
+    if (tags.length === 0) {
+        list.innerHTML = '<div class="empty-state">No tags yet. Create one above.</div>';
+        return;
+    }
+    list.innerHTML = tags.map(t => `
+        <div class="tag-manage-item">
+            <span class="tag-name"><span class="tag">${escHtml(t.name)}</span></span>
+            <button class="btn-link danger" onclick="deleteTag('${t.id}', '${escHtml(t.name)}')">Delete</button>
+        </div>`).join('');
+}
+
+async function deleteTag(id, name) {
+    if (!confirm(`Delete tag "${name}"? It will be removed from all contacts.`)) return;
+    // Remove from all contacts that have this tag
+    const snap = await db.collection('contacts').where('tags', 'array-contains', name).get();
+    const batch = db.batch();
+    snap.docs.forEach(doc => {
+        const newTags = (doc.data().tags || []).filter(t => t !== name);
+        batch.update(doc.ref, { tags: newTags });
+    });
+    batch.delete(db.collection('tags').doc(id));
+    await batch.commit();
+    await loadTags();
+    await loadContacts();
+    populateTagFilter();
+    renderTagsModal();
+}
+
+document.getElementById('btn-nav-tags').addEventListener('click', async () => {
+    await loadTags();
+    renderTagsModal();
+    openModal('modal-tags');
+});
+
+document.getElementById('btn-save-new-tag').addEventListener('click', async () => {
+    const input = document.getElementById('new-tag-name');
+    await createTag(input.value);
+    input.value = '';
+    populateTagFilter();
+    renderTagsModal();
+});
+
+document.getElementById('new-tag-name').addEventListener('keydown', async e => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const input = document.getElementById('new-tag-name');
+        await createTag(input.value);
+        input.value = '';
+        populateTagFilter();
+        renderTagsModal();
+    }
+});
+
+// Inline tag creation inside contact form
+document.getElementById('btn-create-tag-inline').addEventListener('click', async () => {
+    const input = document.getElementById('new-tag-inline');
+    const name = input.value.trim();
+    if (!name) return;
+    await createTag(name);
+    input.value = '';
+    const checked = getCheckedTags();
+    checked.push(name);
+    renderTagCheckboxes(checked);
+    populateTagFilter();
+});
+
+document.getElementById('new-tag-inline').addEventListener('keydown', async e => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const input = document.getElementById('new-tag-inline');
+        const name = input.value.trim();
+        if (!name) return;
+        await createTag(name);
+        input.value = '';
+        const checked = getCheckedTags();
+        checked.push(name);
+        renderTagCheckboxes(checked);
+        populateTagFilter();
+    }
+});
+
+// ========================================================
+// COMPANIES
+// ========================================================
+
+async function loadCompanies() {
+    const snap = await db.collection('companies').orderBy('name').get();
+    companies = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+function getCompanyName(id) {
+    if (!id) return '';
+    const co = companies.find(c => c.id === id);
+    return co ? co.name : '';
+}
+
+function renderCompaniesTable() {
+    const tbody = document.getElementById('companies-tbody');
+    const search = document.getElementById('company-search').value.toLowerCase().trim();
+
+    const filtered = companies.filter(c =>
+        !search ||
+        c.name.toLowerCase().includes(search) ||
+        (c.industry && c.industry.toLowerCase().includes(search))
+    );
+
+    if (filtered.length === 0) {
+        const msg = companies.length === 0
+            ? 'No companies yet. Add your first one!'
+            : 'No companies match your search.';
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">${msg}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(co => {
+        const contactCount = contacts.filter(c => c.companyId === co.id).length;
+        const websiteHtml = co.website
+            ? `<a href="${escHtml(co.website)}" target="_blank" rel="noopener" style="color:#2c5aa0">${escHtml(co.website.replace(/^https?:\/\//, ''))}</a>`
+            : '';
+        return `
+            <tr>
+                <td><strong>${escHtml(co.name)}</strong></td>
+                <td>${escHtml(co.industry || '')}</td>
+                <td>${websiteHtml}</td>
+                <td>${escHtml(co.phone || '')}</td>
+                <td>${contactCount > 0 ? `<button class="btn-link" onclick="filterByCompany('${co.id}')">${contactCount} contact${contactCount !== 1 ? 's' : ''}</button>` : '0'}</td>
+                <td style="white-space:nowrap">
+                    <button class="btn-link" onclick="openEditCompanyModal('${co.id}')">Edit</button>
+                    <button class="btn-link danger" onclick="deleteCompany('${co.id}')">Delete</button>
+                </td>
+            </tr>`;
+    }).join('');
+}
+
+function filterByCompany(companyId) {
+    // Switch to contacts view and filter by company name
+    showView('view-list');
+    document.getElementById('search-input').value = getCompanyName(companyId);
+    renderTable();
+}
+
+function populateCompanyDropdown(selectedId = '') {
+    const sel = document.getElementById('field-company');
+    sel.innerHTML = '<option value="">No company</option>';
+    companies.forEach(co => {
+        const opt = document.createElement('option');
+        opt.value = co.id;
+        opt.textContent = co.name;
+        if (co.id === selectedId) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+function openAddCompanyModal() {
+    editingCompanyId = null;
+    document.getElementById('company-modal-title').textContent = 'Add Company';
+    document.getElementById('company-form').reset();
+    openModal('modal-company');
+    document.getElementById('co-name').focus();
+}
+
+function openEditCompanyModal(id) {
+    const co = companies.find(c => c.id === id);
+    if (!co) return;
+    editingCompanyId = id;
+    document.getElementById('company-modal-title').textContent = 'Edit Company';
+    document.getElementById('co-name').value     = co.name     || '';
+    document.getElementById('co-industry').value = co.industry || '';
+    document.getElementById('co-website').value  = co.website  || '';
+    document.getElementById('co-phone').value    = co.phone    || '';
+    document.getElementById('co-address').value  = co.address  || '';
+    document.getElementById('co-notes').value    = co.notes    || '';
+    openModal('modal-company');
+    document.getElementById('co-name').focus();
+}
+
+document.getElementById('company-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const data = {
+        name:     document.getElementById('co-name').value.trim(),
+        industry: document.getElementById('co-industry').value.trim(),
+        website:  document.getElementById('co-website').value.trim(),
+        phone:    document.getElementById('co-phone').value.trim(),
+        address:  document.getElementById('co-address').value.trim(),
+        notes:    document.getElementById('co-notes').value.trim(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    const submitBtn = document.querySelector('#company-form [type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    try {
+        if (editingCompanyId) {
+            await db.collection('companies').doc(editingCompanyId).update(data);
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection('companies').add(data);
+        }
+        closeModal('modal-company');
+        await loadCompanies();
+        renderCompaniesTable();
+        populateCompanyDropdown();
+    } catch (err) {
+        alert('Error saving company: ' + err.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Company';
+    }
+});
+
+async function deleteCompany(id) {
+    const co = companies.find(c => c.id === id);
+    if (!co) return;
+    if (!confirm(`Delete "${co.name}"? Contacts linked to it will be unlinked.`)) return;
+    try {
+        // Unlink contacts
+        const snap = await db.collection('contacts').where('companyId', '==', id).get();
+        const batch = db.batch();
+        snap.docs.forEach(doc => batch.update(doc.ref, { companyId: '' }));
+        batch.delete(db.collection('companies').doc(id));
+        await batch.commit();
+        await Promise.all([loadCompanies(), loadContacts()]);
+        renderCompaniesTable();
+        renderTable();
+    } catch (err) {
+        alert('Error deleting company: ' + err.message);
+    }
+}
+
+document.getElementById('btn-add-company').addEventListener('click', openAddCompanyModal);
+document.getElementById('company-search').addEventListener('input', renderCompaniesTable);
+
+document.getElementById('btn-nav-companies').addEventListener('click', async () => {
+    showView('view-companies');
+    renderCompaniesTable();
+});
+
+// ========================================================
+// CONTACTS
+// ========================================================
+
 async function loadContacts() {
-    contactsTbody.innerHTML = '<tr><td colspan="7" class="loading">Loading contacts...</td></tr>';
+    const tbody = document.getElementById('contacts-tbody');
+    tbody.innerHTML = '<tr><td colspan="8" class="loading">Loading contacts...</td></tr>';
     try {
         const snap = await db.collection('contacts').orderBy('name').get();
         contacts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderTable();
     } catch (err) {
-        contactsTbody.innerHTML = `<tr><td colspan="7" class="empty-state">Error: ${escHtml(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Error: ${escHtml(err.message)}</td></tr>`;
     }
 }
 
-// ---- RENDER TABLE ----
 function renderTable() {
-    const search   = searchInput.value.toLowerCase().trim();
-    const pipeline = filterPipeline.value;
-    const tag      = filterTag.value.toLowerCase().trim();
+    const tbody    = document.getElementById('contacts-tbody');
+    const search   = document.getElementById('search-input').value.toLowerCase().trim();
+    const pipeline = document.getElementById('filter-pipeline').value;
+    const tag      = document.getElementById('filter-tag').value;
 
     const filtered = contacts.filter(c => {
+        const coName = getCompanyName(c.companyId).toLowerCase();
         const matchSearch = !search ||
             (c.name  && c.name.toLowerCase().includes(search)) ||
             (c.email && c.email.toLowerCase().includes(search)) ||
-            (c.phone && c.phone.toLowerCase().includes(search));
+            (c.phone && c.phone.toLowerCase().includes(search)) ||
+            coName.includes(search);
         const matchPipeline = !pipeline || c.pipelineStatus === pipeline;
-        const matchTag = !tag || (Array.isArray(c.tags) && c.tags.some(t => t.toLowerCase().includes(tag)));
+        const matchTag = !tag || (Array.isArray(c.tags) && c.tags.includes(tag));
         return matchSearch && matchPipeline && matchTag;
     });
 
     if (filtered.length === 0) {
-        contactsTbody.innerHTML = `<tr><td colspan="7" class="empty-state">${contacts.length === 0 ? 'No contacts yet. Add your first one!' : 'No contacts match your filters.'}</td></tr>`;
+        const msg = contacts.length === 0
+            ? 'No contacts yet. Add your first one!'
+            : 'No contacts match your filters.';
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${msg}</td></tr>`;
         return;
     }
 
     const today = todayDate();
-    contactsTbody.innerHTML = filtered.map(c => buildRow(c, today)).join('');
+    tbody.innerHTML = filtered.map(c => buildRow(c, today)).join('');
 }
 
 function buildRow(c, today) {
@@ -83,10 +415,14 @@ function buildRow(c, today) {
         ? c.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join('')
         : '';
 
+    const coName = getCompanyName(c.companyId);
+    const coHtml = coName ? `<span style="color:#555;font-size:12px">${escHtml(coName)}</span>` : '';
+
     const id = c.id;
     return `
         <tr>
             <td><button class="btn-link" onclick="viewContact('${id}')">${escHtml(c.name)}</button></td>
+            <td>${coHtml}</td>
             <td>${c.email ? `<a href="mailto:${escHtml(c.email)}" style="color:#2c5aa0">${escHtml(c.email)}</a>` : ''}</td>
             <td>${escHtml(c.phone || '')}</td>
             <td>${pipeHtml}</td>
@@ -94,7 +430,7 @@ function buildRow(c, today) {
             <td>${followUp}</td>
             <td style="white-space:nowrap">
                 <button class="btn-link" onclick="viewContact('${id}')">View</button>
-                <button class="btn-link" onclick="openEditModal('${id}')">Edit</button>
+                <button class="btn-link" onclick="openEditContactModal('${id}')">Edit</button>
                 <button class="btn-link danger" onclick="deleteContact('${id}')">Delete</button>
             </td>
         </tr>`;
@@ -117,12 +453,18 @@ async function viewContact(id) {
         ? c.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join(' ')
         : '<span style="color:#aaa">—</span>';
 
+    const coName = getCompanyName(c.companyId);
+    const coHtml = coName
+        ? `<button class="company-link" onclick="showView('view-companies'); renderCompaniesTable();">&#127970; ${escHtml(coName)}</button>`
+        : '';
+
     document.getElementById('contact-detail-content').innerHTML = `
         <div class="contact-info-card">
             <h2>${escHtml(c.name)}</h2>
             <div class="contact-subtitle">
                 ${pipeHtml}
-                ${c.howWeMet ? `<span style="color:#666">Met: ${escHtml(c.howWeMet)}</span>` : ''}
+                ${coHtml}
+                ${c.howWeMet ? `<span style="color:#666">Met via: ${escHtml(c.howWeMet)}</span>` : ''}
             </div>
             <div class="info-grid">
                 <div class="info-item">
@@ -213,46 +555,41 @@ async function addActivity() {
     }
 }
 
-// ---- ADD / EDIT MODAL ----
-function openAddModal() {
+// ---- ADD / EDIT CONTACT MODAL ----
+function openAddContactModal() {
     editingContactId = null;
-    document.getElementById('modal-title').textContent = 'Add Contact';
-    contactForm.reset();
-    modalOverlay.classList.remove('hidden');
+    document.getElementById('contact-modal-title').textContent = 'Add Contact';
+    document.getElementById('contact-form').reset();
+    populateCompanyDropdown();
+    renderTagCheckboxes([]);
+    openModal('modal-contact');
     document.getElementById('field-name').focus();
 }
 
-function openEditModal(id) {
+function openEditContactModal(id) {
     const c = contacts.find(x => x.id === id);
     if (!c) return;
     editingContactId = id;
-    document.getElementById('modal-title').textContent = 'Edit Contact';
+    document.getElementById('contact-modal-title').textContent = 'Edit Contact';
 
-    document.getElementById('field-name').value     = c.name        || '';
-    document.getElementById('field-email').value    = c.email       || '';
-    document.getElementById('field-phone').value    = c.phone       || '';
-    document.getElementById('field-social').value   = c.socialHandle || '';
-    document.getElementById('field-how-met').value  = c.howWeMet    || '';
+    document.getElementById('field-name').value     = c.name           || '';
+    document.getElementById('field-email').value    = c.email          || '';
+    document.getElementById('field-phone').value    = c.phone          || '';
+    document.getElementById('field-social').value   = c.socialHandle   || '';
+    document.getElementById('field-how-met').value  = c.howWeMet       || '';
     document.getElementById('field-pipeline').value = c.pipelineStatus || '';
-    document.getElementById('field-tags').value     = Array.isArray(c.tags) ? c.tags.join(', ') : '';
-    document.getElementById('field-followup').value = c.followUpDate || '';
-    document.getElementById('field-notes').value    = c.notes       || '';
+    document.getElementById('field-followup').value = c.followUpDate   || '';
+    document.getElementById('field-notes').value    = c.notes          || '';
 
-    modalOverlay.classList.remove('hidden');
+    populateCompanyDropdown(c.companyId || '');
+    renderTagCheckboxes(Array.isArray(c.tags) ? c.tags : []);
+
+    openModal('modal-contact');
     document.getElementById('field-name').focus();
 }
 
-function closeModal() {
-    modalOverlay.classList.add('hidden');
-    editingContactId = null;
-}
-
-// ---- SAVE CONTACT ----
-async function saveContact(e) {
+document.getElementById('contact-form').addEventListener('submit', async e => {
     e.preventDefault();
-
-    const tagsRaw = document.getElementById('field-tags').value;
-    const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
 
     const data = {
         name:           document.getElementById('field-name').value.trim(),
@@ -261,13 +598,14 @@ async function saveContact(e) {
         socialHandle:   document.getElementById('field-social').value.trim(),
         howWeMet:       document.getElementById('field-how-met').value.trim(),
         pipelineStatus: document.getElementById('field-pipeline').value,
-        tags,
+        companyId:      document.getElementById('field-company').value,
+        tags:           getCheckedTags(),
         followUpDate:   document.getElementById('field-followup').value,
         notes:          document.getElementById('field-notes').value.trim(),
         updatedAt:      firebase.firestore.FieldValue.serverTimestamp()
     };
 
-    const submitBtn = contactForm.querySelector('[type="submit"]');
+    const submitBtn = document.querySelector('#contact-form [type="submit"]');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving...';
 
@@ -278,12 +616,9 @@ async function saveContact(e) {
             data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
             await db.collection('contacts').add(data);
         }
-
         const wasEditing = editingContactId;
-        closeModal();
+        closeModal('modal-contact');
         await loadContacts();
-
-        // Refresh detail view if we just edited the open contact
         if (wasEditing && currentContactId === wasEditing) {
             viewContact(wasEditing);
         }
@@ -293,22 +628,19 @@ async function saveContact(e) {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Save Contact';
     }
-}
+});
 
-// ---- DELETE CONTACT ----
 async function deleteContact(id) {
     const c = contacts.find(x => x.id === id);
     if (!c) return;
     if (!confirm(`Delete "${c.name}"? This cannot be undone.`)) return;
 
     try {
-        // Delete activities subcollection first
         const actSnap = await db.collection('contacts').doc(id).collection('activities').get();
         const batch = db.batch();
         actSnap.docs.forEach(doc => batch.delete(doc.ref));
         batch.delete(db.collection('contacts').doc(id));
         await batch.commit();
-
         await loadContacts();
         if (currentContactId === id) {
             showView('view-list');
@@ -319,7 +651,44 @@ async function deleteContact(id) {
     }
 }
 
-// ---- HELPERS ----
+// ========================================================
+// EVENT LISTENERS
+// ========================================================
+
+document.getElementById('btn-nav-contacts').addEventListener('click', () => {
+    showView('view-list');
+    renderTable();
+});
+
+document.getElementById('btn-add-contact').addEventListener('click', openAddContactModal);
+
+document.getElementById('btn-back').addEventListener('click', () => {
+    showView('view-list');
+    renderTable();
+});
+
+document.getElementById('btn-edit-contact').addEventListener('click', () => {
+    if (currentContactId) openEditContactModal(currentContactId);
+});
+
+document.getElementById('btn-delete-contact').addEventListener('click', () => {
+    if (currentContactId) deleteContact(currentContactId);
+});
+
+document.getElementById('btn-add-activity').addEventListener('click', addActivity);
+
+document.getElementById('activity-note').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) addActivity();
+});
+
+document.getElementById('search-input').addEventListener('input', renderTable);
+document.getElementById('filter-pipeline').addEventListener('change', renderTable);
+document.getElementById('filter-tag').addEventListener('change', renderTable);
+
+// ========================================================
+// HELPERS
+// ========================================================
+
 function todayDate() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -351,45 +720,13 @@ function escHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
-// ---- EVENT LISTENERS ----
-document.getElementById('btn-contacts').addEventListener('click', () => {
-    showView('view-list');
-    renderTable();
-});
+// ========================================================
+// INIT — load everything in parallel
+// ========================================================
+async function init() {
+    await Promise.all([loadTags(), loadCompanies()]);
+    populateTagFilter();
+    await loadContacts();
+}
 
-document.getElementById('btn-add-contact').addEventListener('click', openAddModal);
-
-document.getElementById('btn-back').addEventListener('click', () => {
-    showView('view-list');
-    renderTable();
-});
-
-document.getElementById('btn-edit-contact').addEventListener('click', () => {
-    if (currentContactId) openEditModal(currentContactId);
-});
-
-document.getElementById('btn-delete-contact').addEventListener('click', () => {
-    if (currentContactId) deleteContact(currentContactId);
-});
-
-document.getElementById('btn-add-activity').addEventListener('click', addActivity);
-
-document.getElementById('activity-note').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) addActivity();
-});
-
-document.getElementById('modal-close').addEventListener('click', closeModal);
-document.getElementById('btn-cancel-form').addEventListener('click', closeModal);
-
-modalOverlay.addEventListener('click', e => {
-    if (e.target === modalOverlay) closeModal();
-});
-
-contactForm.addEventListener('submit', saveContact);
-
-searchInput.addEventListener('input', renderTable);
-filterPipeline.addEventListener('change', renderTable);
-filterTag.addEventListener('input', renderTable);
-
-// ---- INIT ----
-loadContacts();
+init();

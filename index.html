@@ -11,14 +11,17 @@
         <div class="header-inner">
             <h1>Networking CRM</h1>
             <nav>
-                <button id="btn-contacts" class="nav-btn active">Contacts</button>
+                <button id="btn-nav-contacts" class="nav-btn active">Contacts</button>
+                <button id="btn-nav-companies" class="nav-btn">Companies</button>
+                <button id="btn-nav-tags" class="nav-btn">Manage Tags</button>
                 <button id="btn-add-contact" class="nav-btn primary">+ Add Contact</button>
             </nav>
         </div>
     </header>
 
     <main>
-        <!-- Contact List View -->
+
+        <!-- ==================== CONTACTS LIST VIEW ==================== -->
         <div id="view-list" class="view active">
             <div class="toolbar">
                 <input type="text" id="search-input" placeholder="Search by name, email, phone..." />
@@ -29,12 +32,15 @@
                     <option value="Close">Close</option>
                     <option value="Follow Up">Follow Up</option>
                 </select>
-                <input type="text" id="filter-tag" placeholder="Filter by tag..." style="width:160px" />
+                <select id="filter-tag">
+                    <option value="">All Tags</option>
+                </select>
             </div>
-            <table id="contacts-table">
+            <table class="data-table" id="contacts-table">
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>Company</th>
                         <th>Email</th>
                         <th>Phone</th>
                         <th>Pipeline</th>
@@ -47,7 +53,7 @@
             </table>
         </div>
 
-        <!-- Contact Detail View -->
+        <!-- ==================== CONTACT DETAIL VIEW ==================== -->
         <div id="view-detail" class="view">
             <div class="detail-header">
                 <button id="btn-back" class="btn-secondary">&#8592; Back to Contacts</button>
@@ -64,14 +70,36 @@
                 <div id="activity-list"></div>
             </div>
         </div>
+
+        <!-- ==================== COMPANIES VIEW ==================== -->
+        <div id="view-companies" class="view">
+            <div class="toolbar">
+                <input type="text" id="company-search" placeholder="Search companies..." />
+                <button id="btn-add-company" class="btn-primary">+ Add Company</button>
+            </div>
+            <table class="data-table" id="companies-table">
+                <thead>
+                    <tr>
+                        <th>Company Name</th>
+                        <th>Industry</th>
+                        <th>Website</th>
+                        <th>Phone</th>
+                        <th>Contacts</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="companies-tbody"></tbody>
+            </table>
+        </div>
+
     </main>
 
-    <!-- Add/Edit Contact Modal -->
-    <div id="modal-overlay" class="modal-overlay hidden">
+    <!-- ==================== ADD/EDIT CONTACT MODAL ==================== -->
+    <div id="modal-contact" class="modal-overlay hidden">
         <div class="modal">
             <div class="modal-header">
-                <h2 id="modal-title">Add Contact</h2>
-                <button id="modal-close">&times;</button>
+                <h2 id="contact-modal-title">Add Contact</h2>
+                <button class="modal-close-btn" data-modal="modal-contact">&times;</button>
             </div>
             <form id="contact-form">
                 <div class="form-row">
@@ -102,12 +130,14 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Social Handle</label>
-                        <input type="text" id="field-social" placeholder="@username or profile URL" />
+                        <label>Company</label>
+                        <select id="field-company">
+                            <option value="">No company</option>
+                        </select>
                     </div>
                     <div class="form-group">
-                        <label>Follow-Up Date</label>
-                        <input type="date" id="field-followup" />
+                        <label>Social Handle</label>
+                        <input type="text" id="field-social" placeholder="@username or profile URL" />
                     </div>
                 </div>
                 <div class="form-row">
@@ -116,8 +146,16 @@
                         <input type="text" id="field-how-met" placeholder="Conference, intro, LinkedIn..." />
                     </div>
                     <div class="form-group">
-                        <label>Tags <span class="hint">(comma separated)</span></label>
-                        <input type="text" id="field-tags" placeholder="investor, founder, mentor" />
+                        <label>Follow-Up Date</label>
+                        <input type="date" id="field-followup" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Tags</label>
+                    <div id="tag-checkboxes" class="tag-checkbox-list"></div>
+                    <div class="add-tag-inline">
+                        <input type="text" id="new-tag-inline" placeholder="Create new tag..." />
+                        <button type="button" id="btn-create-tag-inline">+ Add</button>
                     </div>
                 </div>
                 <div class="form-group">
@@ -125,10 +163,71 @@
                     <textarea id="field-notes" rows="4" placeholder="Background, context, conversation topics..."></textarea>
                 </div>
                 <div class="form-actions">
-                    <button type="button" id="btn-cancel-form" class="btn-secondary">Cancel</button>
+                    <button type="button" class="btn-secondary" data-modal="modal-contact" id="btn-cancel-contact">Cancel</button>
                     <button type="submit" class="btn-primary">Save Contact</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- ==================== ADD/EDIT COMPANY MODAL ==================== -->
+    <div id="modal-company" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="company-modal-title">Add Company</h2>
+                <button class="modal-close-btn" data-modal="modal-company">&times;</button>
+            </div>
+            <form id="company-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Company Name <span class="required">*</span></label>
+                        <input type="text" id="co-name" required />
+                    </div>
+                    <div class="form-group">
+                        <label>Industry</label>
+                        <input type="text" id="co-industry" placeholder="Tech, Finance, Healthcare..." />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Website</label>
+                        <input type="text" id="co-website" placeholder="https://..." />
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="tel" id="co-phone" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <input type="text" id="co-address" placeholder="City, State or full address" />
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="co-notes" rows="3" placeholder="Background, funding, context..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" data-modal="modal-company">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Company</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== MANAGE TAGS MODAL ==================== -->
+    <div id="modal-tags" class="modal-overlay hidden">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2>Manage Tags</h2>
+                <button class="modal-close-btn" data-modal="modal-tags">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="add-tag-row">
+                    <input type="text" id="new-tag-name" placeholder="New tag name..." />
+                    <button id="btn-save-new-tag" class="btn-primary">Add Tag</button>
+                </div>
+                <div id="tags-list"></div>
+            </div>
         </div>
     </div>
 
