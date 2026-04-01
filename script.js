@@ -9,7 +9,8 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+const db   = firebase.firestore();
+const auth = firebase.auth();
 
 // ---- STATE ----
 let contacts       = [];
@@ -721,6 +722,60 @@ function escHtml(str) {
 }
 
 // ========================================================
+// AUTH
+// ========================================================
+
+const loginPage = document.getElementById('login-page');
+const appEl     = document.getElementById('app');
+
+auth.onAuthStateChanged(user => {
+    if (user) {
+        loginPage.classList.add('hidden');
+        appEl.classList.remove('hidden');
+        init();
+    } else {
+        appEl.classList.add('hidden');
+        loginPage.classList.remove('hidden');
+        // Reset state so stale data isn't shown on re-login
+        contacts = []; companies = []; tags = [];
+    }
+});
+
+document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errorEl  = document.getElementById('login-error');
+    const btn      = document.getElementById('btn-login');
+
+    errorEl.classList.add('hidden');
+    errorEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+
+    try {
+        await auth.signInWithEmailAndPassword(email, password);
+    } catch (err) {
+        const messages = {
+            'auth/user-not-found':   'No account found with that email.',
+            'auth/wrong-password':   'Incorrect password.',
+            'auth/invalid-email':    'Please enter a valid email address.',
+            'auth/too-many-requests':'Too many attempts. Please try again later.',
+            'auth/invalid-credential': 'Incorrect email or password.'
+        };
+        errorEl.textContent = messages[err.code] || err.message;
+        errorEl.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+    }
+});
+
+document.getElementById('btn-logout').addEventListener('click', async () => {
+    await auth.signOut();
+});
+
+// ========================================================
 // INIT — load everything in parallel
 // ========================================================
 async function init() {
@@ -728,5 +783,3 @@ async function init() {
     populateTagFilter();
     await loadContacts();
 }
-
-init();

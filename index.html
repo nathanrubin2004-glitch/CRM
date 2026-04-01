@@ -7,233 +7,261 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <div class="header-inner">
+
+    <!-- ==================== LOGIN PAGE ==================== -->
+    <div id="login-page">
+        <div class="login-card">
             <h1>Networking CRM</h1>
-            <nav>
-                <button id="btn-nav-contacts" class="nav-btn active">Contacts</button>
-                <button id="btn-nav-companies" class="nav-btn">Companies</button>
-                <button id="btn-nav-tags" class="nav-btn">Manage Tags</button>
-                <button id="btn-add-contact" class="nav-btn primary">+ Add Contact</button>
-            </nav>
-        </div>
-    </header>
-
-    <main>
-
-        <!-- ==================== CONTACTS LIST VIEW ==================== -->
-        <div id="view-list" class="view active">
-            <div class="toolbar">
-                <input type="text" id="search-input" placeholder="Search by name, email, phone..." />
-                <select id="filter-pipeline">
-                    <option value="">All Pipeline Stages</option>
-                    <option value="Lead">Lead</option>
-                    <option value="Active">Active</option>
-                    <option value="Close">Close</option>
-                    <option value="Follow Up">Follow Up</option>
-                </select>
-                <select id="filter-tag">
-                    <option value="">All Tags</option>
-                </select>
-            </div>
-            <table class="data-table" id="contacts-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Company</th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th>Pipeline</th>
-                        <th>Tags</th>
-                        <th>Follow-Up</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="contacts-tbody"></tbody>
-            </table>
-        </div>
-
-        <!-- ==================== CONTACT DETAIL VIEW ==================== -->
-        <div id="view-detail" class="view">
-            <div class="detail-header">
-                <button id="btn-back" class="btn-secondary">&#8592; Back to Contacts</button>
-                <button id="btn-edit-contact" class="btn-primary">Edit Contact</button>
-                <button id="btn-delete-contact" class="btn-danger">Delete</button>
-            </div>
-            <div id="contact-detail-content"></div>
-            <div class="activity-section">
-                <h3>Activity Log</h3>
-                <div class="add-activity">
-                    <textarea id="activity-note" placeholder="Add a note... (Ctrl+Enter to submit)"></textarea>
-                    <button id="btn-add-activity" class="btn-primary">Add Note</button>
-                </div>
-                <div id="activity-list"></div>
-            </div>
-        </div>
-
-        <!-- ==================== COMPANIES VIEW ==================== -->
-        <div id="view-companies" class="view">
-            <div class="toolbar">
-                <input type="text" id="company-search" placeholder="Search companies..." />
-                <button id="btn-add-company" class="btn-primary">+ Add Company</button>
-            </div>
-            <table class="data-table" id="companies-table">
-                <thead>
-                    <tr>
-                        <th>Company Name</th>
-                        <th>Industry</th>
-                        <th>Website</th>
-                        <th>Phone</th>
-                        <th>Contacts</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="companies-tbody"></tbody>
-            </table>
-        </div>
-
-    </main>
-
-    <!-- ==================== ADD/EDIT CONTACT MODAL ==================== -->
-    <div id="modal-contact" class="modal-overlay hidden">
-        <div class="modal">
-            <div class="modal-header">
-                <h2 id="contact-modal-title">Add Contact</h2>
-                <button class="modal-close-btn" data-modal="modal-contact">&times;</button>
-            </div>
-            <form id="contact-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Name <span class="required">*</span></label>
-                        <input type="text" id="field-name" required />
-                    </div>
-                    <div class="form-group">
-                        <label>Pipeline Status</label>
-                        <select id="field-pipeline">
-                            <option value="">None</option>
-                            <option value="Lead">Lead</option>
-                            <option value="Active">Active</option>
-                            <option value="Close">Close</option>
-                            <option value="Follow Up">Follow Up</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="field-email" />
-                    </div>
-                    <div class="form-group">
-                        <label>Phone</label>
-                        <input type="tel" id="field-phone" />
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Company</label>
-                        <select id="field-company">
-                            <option value="">No company</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Social Handle</label>
-                        <input type="text" id="field-social" placeholder="@username or profile URL" />
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>How We Met</label>
-                        <input type="text" id="field-how-met" placeholder="Conference, intro, LinkedIn..." />
-                    </div>
-                    <div class="form-group">
-                        <label>Follow-Up Date</label>
-                        <input type="date" id="field-followup" />
-                    </div>
+            <p class="login-subtitle">Sign in to continue</p>
+            <form id="login-form" novalidate>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" required />
                 </div>
                 <div class="form-group">
-                    <label>Tags</label>
-                    <div id="tag-checkboxes" class="tag-checkbox-list"></div>
-                    <div class="add-tag-inline">
-                        <input type="text" id="new-tag-inline" placeholder="Create new tag..." />
-                        <button type="button" id="btn-create-tag-inline">+ Add</button>
-                    </div>
+                    <label>Password</label>
+                    <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required />
                 </div>
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="field-notes" rows="4" placeholder="Background, context, conversation topics..."></textarea>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary" data-modal="modal-contact" id="btn-cancel-contact">Cancel</button>
-                    <button type="submit" class="btn-primary">Save Contact</button>
-                </div>
+                <div id="login-error" class="login-error hidden"></div>
+                <button type="submit" id="btn-login" class="btn-login">Sign In</button>
             </form>
         </div>
     </div>
 
-    <!-- ==================== ADD/EDIT COMPANY MODAL ==================== -->
-    <div id="modal-company" class="modal-overlay hidden">
-        <div class="modal">
-            <div class="modal-header">
-                <h2 id="company-modal-title">Add Company</h2>
-                <button class="modal-close-btn" data-modal="modal-company">&times;</button>
-            </div>
-            <form id="company-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Company Name <span class="required">*</span></label>
-                        <input type="text" id="co-name" required />
-                    </div>
-                    <div class="form-group">
-                        <label>Industry</label>
-                        <input type="text" id="co-industry" placeholder="Tech, Finance, Healthcare..." />
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Website</label>
-                        <input type="text" id="co-website" placeholder="https://..." />
-                    </div>
-                    <div class="form-group">
-                        <label>Phone</label>
-                        <input type="tel" id="co-phone" />
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Address</label>
-                    <input type="text" id="co-address" placeholder="City, State or full address" />
-                </div>
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="co-notes" rows="3" placeholder="Background, funding, context..."></textarea>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary" data-modal="modal-company">Cancel</button>
-                    <button type="submit" class="btn-primary">Save Company</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <!-- ==================== MAIN APP (hidden until auth) ==================== -->
+    <div id="app" class="hidden">
 
-    <!-- ==================== MANAGE TAGS MODAL ==================== -->
-    <div id="modal-tags" class="modal-overlay hidden">
-        <div class="modal modal-sm">
-            <div class="modal-header">
-                <h2>Manage Tags</h2>
-                <button class="modal-close-btn" data-modal="modal-tags">&times;</button>
+        <header>
+            <div class="header-inner">
+                <h1>Networking CRM</h1>
+                <nav>
+                    <button id="btn-nav-contacts" class="nav-btn active">Contacts</button>
+                    <button id="btn-nav-companies" class="nav-btn">Companies</button>
+                    <button id="btn-nav-tags" class="nav-btn">Manage Tags</button>
+                    <button id="btn-add-contact" class="nav-btn primary">+ Add Contact</button>
+                    <button id="btn-logout" class="nav-btn logout">Sign Out</button>
+                </nav>
             </div>
-            <div class="modal-body">
-                <div class="add-tag-row">
-                    <input type="text" id="new-tag-name" placeholder="New tag name..." />
-                    <button id="btn-save-new-tag" class="btn-primary">Add Tag</button>
+        </header>
+
+        <main>
+
+            <!-- ==================== CONTACTS LIST VIEW ==================== -->
+            <div id="view-list" class="view active">
+                <div class="toolbar">
+                    <input type="text" id="search-input" placeholder="Search by name, email, phone..." />
+                    <select id="filter-pipeline">
+                        <option value="">All Pipeline Stages</option>
+                        <option value="Lead">Lead</option>
+                        <option value="Active">Active</option>
+                        <option value="Close">Close</option>
+                        <option value="Follow Up">Follow Up</option>
+                    </select>
+                    <select id="filter-tag">
+                        <option value="">All Tags</option>
+                    </select>
                 </div>
-                <div id="tags-list"></div>
+                <table class="data-table" id="contacts-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Company</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Pipeline</th>
+                            <th>Tags</th>
+                            <th>Follow-Up</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contacts-tbody"></tbody>
+                </table>
+            </div>
+
+            <!-- ==================== CONTACT DETAIL VIEW ==================== -->
+            <div id="view-detail" class="view">
+                <div class="detail-header">
+                    <button id="btn-back" class="btn-secondary">&#8592; Back to Contacts</button>
+                    <button id="btn-edit-contact" class="btn-primary">Edit Contact</button>
+                    <button id="btn-delete-contact" class="btn-danger">Delete</button>
+                </div>
+                <div id="contact-detail-content"></div>
+                <div class="activity-section">
+                    <h3>Activity Log</h3>
+                    <div class="add-activity">
+                        <textarea id="activity-note" placeholder="Add a note... (Ctrl+Enter to submit)"></textarea>
+                        <button id="btn-add-activity" class="btn-primary">Add Note</button>
+                    </div>
+                    <div id="activity-list"></div>
+                </div>
+            </div>
+
+            <!-- ==================== COMPANIES VIEW ==================== -->
+            <div id="view-companies" class="view">
+                <div class="toolbar">
+                    <input type="text" id="company-search" placeholder="Search companies..." />
+                    <button id="btn-add-company" class="btn-primary">+ Add Company</button>
+                </div>
+                <table class="data-table" id="companies-table">
+                    <thead>
+                        <tr>
+                            <th>Company Name</th>
+                            <th>Industry</th>
+                            <th>Website</th>
+                            <th>Phone</th>
+                            <th>Contacts</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="companies-tbody"></tbody>
+                </table>
+            </div>
+
+        </main>
+
+        <!-- ==================== ADD/EDIT CONTACT MODAL ==================== -->
+        <div id="modal-contact" class="modal-overlay hidden">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2 id="contact-modal-title">Add Contact</h2>
+                    <button class="modal-close-btn" data-modal="modal-contact">&times;</button>
+                </div>
+                <form id="contact-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Name <span class="required">*</span></label>
+                            <input type="text" id="field-name" required />
+                        </div>
+                        <div class="form-group">
+                            <label>Pipeline Status</label>
+                            <select id="field-pipeline">
+                                <option value="">None</option>
+                                <option value="Lead">Lead</option>
+                                <option value="Active">Active</option>
+                                <option value="Close">Close</option>
+                                <option value="Follow Up">Follow Up</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="field-email" />
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="field-phone" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Company</label>
+                            <select id="field-company">
+                                <option value="">No company</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Social Handle</label>
+                            <input type="text" id="field-social" placeholder="@username or profile URL" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>How We Met</label>
+                            <input type="text" id="field-how-met" placeholder="Conference, intro, LinkedIn..." />
+                        </div>
+                        <div class="form-group">
+                            <label>Follow-Up Date</label>
+                            <input type="date" id="field-followup" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Tags</label>
+                        <div id="tag-checkboxes" class="tag-checkbox-list"></div>
+                        <div class="add-tag-inline">
+                            <input type="text" id="new-tag-inline" placeholder="Create new tag..." />
+                            <button type="button" id="btn-create-tag-inline">+ Add</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="field-notes" rows="4" placeholder="Background, context, conversation topics..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-secondary" data-modal="modal-contact" id="btn-cancel-contact">Cancel</button>
+                        <button type="submit" class="btn-primary">Save Contact</button>
+                    </div>
+                </form>
             </div>
         </div>
-    </div>
+
+        <!-- ==================== ADD/EDIT COMPANY MODAL ==================== -->
+        <div id="modal-company" class="modal-overlay hidden">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2 id="company-modal-title">Add Company</h2>
+                    <button class="modal-close-btn" data-modal="modal-company">&times;</button>
+                </div>
+                <form id="company-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Company Name <span class="required">*</span></label>
+                            <input type="text" id="co-name" required />
+                        </div>
+                        <div class="form-group">
+                            <label>Industry</label>
+                            <input type="text" id="co-industry" placeholder="Tech, Finance, Healthcare..." />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Website</label>
+                            <input type="text" id="co-website" placeholder="https://..." />
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="co-phone" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Address</label>
+                        <input type="text" id="co-address" placeholder="City, State or full address" />
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="co-notes" rows="3" placeholder="Background, funding, context..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-secondary" data-modal="modal-company">Cancel</button>
+                        <button type="submit" class="btn-primary">Save Company</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ==================== MANAGE TAGS MODAL ==================== -->
+        <div id="modal-tags" class="modal-overlay hidden">
+            <div class="modal modal-sm">
+                <div class="modal-header">
+                    <h2>Manage Tags</h2>
+                    <button class="modal-close-btn" data-modal="modal-tags">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="add-tag-row">
+                        <input type="text" id="new-tag-name" placeholder="New tag name..." />
+                        <button id="btn-save-new-tag" class="btn-primary">Add Tag</button>
+                    </div>
+                    <div id="tags-list"></div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /#app -->
 
     <!-- Firebase SDKs (compat) -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
