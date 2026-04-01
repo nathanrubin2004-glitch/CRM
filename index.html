@@ -49,14 +49,7 @@
             <!-- ==================== CONTACTS LIST VIEW ==================== -->
             <div id="view-list" class="view active">
                 <div class="toolbar">
-                    <input type="text" id="search-input" placeholder="Search by name, email, phone..." />
-                    <select id="filter-pipeline">
-                        <option value="">All Pipeline Stages</option>
-                        <option value="Lead">Lead</option>
-                        <option value="Active">Active</option>
-                        <option value="Close">Close</option>
-                        <option value="Follow Up">Follow Up</option>
-                    </select>
+                    <input type="text" id="search-input" placeholder="Search by name, email, phone, company..." />
                     <select id="filter-tag">
                         <option value="">All Tags</option>
                     </select>
@@ -68,7 +61,6 @@
                             <th>Company</th>
                             <th>Email</th>
                             <th>Phone</th>
-                            <th>Pipeline</th>
                             <th>Tags</th>
                             <th>Follow-Up</th>
                             <th>Actions</th>
@@ -127,21 +119,9 @@
                     <button class="modal-close-btn" data-modal="modal-contact">&times;</button>
                 </div>
                 <form id="contact-form">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Name <span class="required">*</span></label>
-                            <input type="text" id="field-name" required />
-                        </div>
-                        <div class="form-group">
-                            <label>Pipeline Status</label>
-                            <select id="field-pipeline">
-                                <option value="">None</option>
-                                <option value="Lead">Lead</option>
-                                <option value="Active">Active</option>
-                                <option value="Close">Close</option>
-                                <option value="Follow Up">Follow Up</option>
-                            </select>
-                        </div>
+                    <div class="form-group">
+                        <label>Name <span class="required">*</span></label>
+                        <input type="text" id="field-name" required />
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -156,9 +136,12 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Company</label>
-                            <select id="field-company">
-                                <option value="">No company</option>
-                            </select>
+                            <div class="company-autocomplete">
+                                <input type="text" id="field-company-text"
+                                    placeholder="Type to search or enter new name..."
+                                    autocomplete="off" />
+                                <div id="company-suggestions" class="suggestions-dropdown hidden"></div>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>Social Handle</label>

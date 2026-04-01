@@ -13,12 +13,13 @@ const db   = firebase.firestore();
 const auth = firebase.auth();
 
 // ---- STATE ----
-let contacts       = [];
-let companies      = [];
-let tags           = [];
+let contacts          = [];
+let companies         = [];
+let tags              = [];
 let currentContactId  = null;
 let editingContactId  = null;
 let editingCompanyId  = null;
+let selectedCompanyId = null; // tracks autocomplete selection in contact form
 
 // ---- VIEW SWITCHING ----
 function showView(id) {
@@ -43,12 +44,10 @@ function closeModal(id) {
     document.getElementById(id).classList.add('hidden');
 }
 
-// Close modal buttons (generic via data-modal attribute)
 document.querySelectorAll('.modal-close-btn, [data-modal]').forEach(btn => {
     btn.addEventListener('click', () => closeModal(btn.dataset.modal));
 });
 
-// Close on backdrop click
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', e => {
         if (e.target === overlay) closeModal(overlay.id);
@@ -115,7 +114,6 @@ async function createTag(name) {
     await loadTags();
 }
 
-// ---- Manage Tags Modal ----
 function renderTagsModal() {
     const list = document.getElementById('tags-list');
     if (tags.length === 0) {
@@ -131,7 +129,6 @@ function renderTagsModal() {
 
 async function deleteTag(id, name) {
     if (!confirm(`Delete tag "${name}"? It will be removed from all contacts.`)) return;
-    // Remove from all contacts that have this tag
     const snap = await db.collection('contacts').where('tags', 'array-contains', name).get();
     const batch = db.batch();
     snap.docs.forEach(doc => {
@@ -171,7 +168,6 @@ document.getElementById('new-tag-name').addEventListener('keydown', async e => {
     }
 });
 
-// Inline tag creation inside contact form
 document.getElementById('btn-create-tag-inline').addEventListener('click', async () => {
     const input = document.getElementById('new-tag-inline');
     const name = input.value.trim();
@@ -208,14 +204,18 @@ async function loadCompanies() {
     companies = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
-function getCompanyName(id) {
-    if (!id) return '';
-    const co = companies.find(c => c.id === id);
-    return co ? co.name : '';
+// Returns the display name for a contact's company field.
+// Prefers linked company record; falls back to freetext companyName.
+function getDisplayCompany(contact) {
+    if (contact.companyId) {
+        const co = companies.find(c => c.id === contact.companyId);
+        if (co) return co.name;
+    }
+    return contact.companyName || '';
 }
 
 function renderCompaniesTable() {
-    const tbody = document.getElementById('companies-tbody');
+    const tbody  = document.getElementById('companies-tbody');
     const search = document.getElementById('company-search').value.toLowerCase().trim();
 
     const filtered = companies.filter(c =>
@@ -234,7 +234,7 @@ function renderCompaniesTable() {
 
     tbody.innerHTML = filtered.map(co => {
         const contactCount = contacts.filter(c => c.companyId === co.id).length;
-        const websiteHtml = co.website
+        const websiteHtml  = co.website
             ? `<a href="${escHtml(co.website)}" target="_blank" rel="noopener" style="color:#2c5aa0">${escHtml(co.website.replace(/^https?:\/\//, ''))}</a>`
             : '';
         return `
@@ -253,22 +253,10 @@ function renderCompaniesTable() {
 }
 
 function filterByCompany(companyId) {
-    // Switch to contacts view and filter by company name
     showView('view-list');
-    document.getElementById('search-input').value = getCompanyName(companyId);
+    const co = companies.find(c => c.id === companyId);
+    document.getElementById('search-input').value = co ? co.name : '';
     renderTable();
-}
-
-function populateCompanyDropdown(selectedId = '') {
-    const sel = document.getElementById('field-company');
-    sel.innerHTML = '<option value="">No company</option>';
-    companies.forEach(co => {
-        const opt = document.createElement('option');
-        opt.value = co.id;
-        opt.textContent = co.name;
-        if (co.id === selectedId) opt.selected = true;
-        sel.appendChild(opt);
-    });
 }
 
 function openAddCompanyModal() {
@@ -320,7 +308,6 @@ document.getElementById('company-form').addEventListener('submit', async e => {
         closeModal('modal-company');
         await loadCompanies();
         renderCompaniesTable();
-        populateCompanyDropdown();
     } catch (err) {
         alert('Error saving company: ' + err.message);
     } finally {
@@ -334,10 +321,9 @@ async function deleteCompany(id) {
     if (!co) return;
     if (!confirm(`Delete "${co.name}"? Contacts linked to it will be unlinked.`)) return;
     try {
-        // Unlink contacts
         const snap = await db.collection('contacts').where('companyId', '==', id).get();
         const batch = db.batch();
-        snap.docs.forEach(doc => batch.update(doc.ref, { companyId: '' }));
+        snap.docs.forEach(doc => batch.update(doc.ref, { companyId: '', companyName: co.name }));
         batch.delete(db.collection('companies').doc(id));
         await batch.commit();
         await Promise.all([loadCompanies(), loadContacts()]);
@@ -357,44 +343,109 @@ document.getElementById('btn-nav-companies').addEventListener('click', async () 
 });
 
 // ========================================================
+// COMPANY AUTOCOMPLETE (contact form)
+// ========================================================
+
+const coTextInput   = document.getElementById('field-company-text');
+const coSuggestions = document.getElementById('company-suggestions');
+
+function initCompanyAutocomplete(contact = null) {
+    selectedCompanyId = null;
+    coSuggestions.classList.add('hidden');
+    coSuggestions.innerHTML = '';
+
+    if (contact) {
+        // Populate from existing contact
+        const displayName = getDisplayCompany(contact);
+        coTextInput.value = displayName;
+        if (contact.companyId) selectedCompanyId = contact.companyId;
+    } else {
+        coTextInput.value = '';
+    }
+}
+
+function showCompanySuggestions(query) {
+    const q = query.toLowerCase().trim();
+    if (!q) {
+        coSuggestions.classList.add('hidden');
+        return;
+    }
+
+    const matches = companies.filter(co => co.name.toLowerCase().includes(q));
+
+    if (matches.length === 0) {
+        coSuggestions.classList.add('hidden');
+        return;
+    }
+
+    coSuggestions.innerHTML = matches.map(co =>
+        `<div class="suggestion-item" data-id="${co.id}" data-name="${escHtml(co.name)}">${escHtml(co.name)}</div>`
+    ).join('');
+    coSuggestions.classList.remove('hidden');
+}
+
+coTextInput.addEventListener('input', () => {
+    selectedCompanyId = null; // clear selection when user types
+    showCompanySuggestions(coTextInput.value);
+});
+
+coTextInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        coSuggestions.classList.add('hidden');
+    }
+});
+
+coSuggestions.addEventListener('mousedown', e => {
+    // mousedown fires before blur, so we can capture the click
+    const item = e.target.closest('.suggestion-item');
+    if (!item) return;
+    selectedCompanyId     = item.dataset.id;
+    coTextInput.value     = item.dataset.name;
+    coSuggestions.classList.add('hidden');
+});
+
+coTextInput.addEventListener('blur', () => {
+    // Short delay so mousedown on a suggestion fires first
+    setTimeout(() => coSuggestions.classList.add('hidden'), 150);
+});
+
+// ========================================================
 // CONTACTS
 // ========================================================
 
 async function loadContacts() {
     const tbody = document.getElementById('contacts-tbody');
-    tbody.innerHTML = '<tr><td colspan="8" class="loading">Loading contacts...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading contacts...</td></tr>';
     try {
         const snap = await db.collection('contacts').orderBy('name').get();
         contacts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderTable();
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Error: ${escHtml(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Error: ${escHtml(err.message)}</td></tr>`;
     }
 }
 
 function renderTable() {
-    const tbody    = document.getElementById('contacts-tbody');
-    const search   = document.getElementById('search-input').value.toLowerCase().trim();
-    const pipeline = document.getElementById('filter-pipeline').value;
-    const tag      = document.getElementById('filter-tag').value;
+    const tbody  = document.getElementById('contacts-tbody');
+    const search = document.getElementById('search-input').value.toLowerCase().trim();
+    const tag    = document.getElementById('filter-tag').value;
 
     const filtered = contacts.filter(c => {
-        const coName = getCompanyName(c.companyId).toLowerCase();
+        const coName = getDisplayCompany(c).toLowerCase();
         const matchSearch = !search ||
             (c.name  && c.name.toLowerCase().includes(search)) ||
             (c.email && c.email.toLowerCase().includes(search)) ||
             (c.phone && c.phone.toLowerCase().includes(search)) ||
             coName.includes(search);
-        const matchPipeline = !pipeline || c.pipelineStatus === pipeline;
         const matchTag = !tag || (Array.isArray(c.tags) && c.tags.includes(tag));
-        return matchSearch && matchPipeline && matchTag;
+        return matchSearch && matchTag;
     });
 
     if (filtered.length === 0) {
         const msg = contacts.length === 0
             ? 'No contacts yet. Add your first one!'
             : 'No contacts match your filters.';
-        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${msg}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${msg}</td></tr>`;
         return;
     }
 
@@ -408,15 +459,11 @@ function buildRow(c, today) {
         ? `<span class="${overdue ? 'overdue' : ''}">${fmtDate(c.followUpDate)}${overdue ? ' &#9888;' : ''}</span>`
         : '';
 
-    const pipeHtml = c.pipelineStatus
-        ? `<span class="badge badge-${slugify(c.pipelineStatus)}">${escHtml(c.pipelineStatus)}</span>`
-        : '';
-
     const tagsHtml = Array.isArray(c.tags)
         ? c.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join('')
         : '';
 
-    const coName = getCompanyName(c.companyId);
+    const coName = getDisplayCompany(c);
     const coHtml = coName ? `<span style="color:#555;font-size:12px">${escHtml(coName)}</span>` : '';
 
     const id = c.id;
@@ -426,7 +473,6 @@ function buildRow(c, today) {
             <td>${coHtml}</td>
             <td>${c.email ? `<a href="mailto:${escHtml(c.email)}" style="color:#2c5aa0">${escHtml(c.email)}</a>` : ''}</td>
             <td>${escHtml(c.phone || '')}</td>
-            <td>${pipeHtml}</td>
             <td>${tagsHtml}</td>
             <td>${followUp}</td>
             <td style="white-space:nowrap">
@@ -446,15 +492,11 @@ async function viewContact(id) {
     const today   = todayDate();
     const overdue = c.followUpDate && c.followUpDate < today;
 
-    const pipeHtml = c.pipelineStatus
-        ? `<span class="badge badge-${slugify(c.pipelineStatus)}">${escHtml(c.pipelineStatus)}</span>`
-        : '';
-
     const tagsHtml = Array.isArray(c.tags) && c.tags.length
         ? c.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join(' ')
         : '<span style="color:#aaa">—</span>';
 
-    const coName = getCompanyName(c.companyId);
+    const coName = getDisplayCompany(c);
     const coHtml = coName
         ? `<button class="company-link" onclick="showView('view-companies'); renderCompaniesTable();">&#127970; ${escHtml(coName)}</button>`
         : '';
@@ -463,7 +505,6 @@ async function viewContact(id) {
         <div class="contact-info-card">
             <h2>${escHtml(c.name)}</h2>
             <div class="contact-subtitle">
-                ${pipeHtml}
                 ${coHtml}
                 ${c.howWeMet ? `<span style="color:#666">Met via: ${escHtml(c.howWeMet)}</span>` : ''}
             </div>
@@ -561,7 +602,7 @@ function openAddContactModal() {
     editingContactId = null;
     document.getElementById('contact-modal-title').textContent = 'Add Contact';
     document.getElementById('contact-form').reset();
-    populateCompanyDropdown();
+    initCompanyAutocomplete();
     renderTagCheckboxes([]);
     openModal('modal-contact');
     document.getElementById('field-name').focus();
@@ -573,16 +614,15 @@ function openEditContactModal(id) {
     editingContactId = id;
     document.getElementById('contact-modal-title').textContent = 'Edit Contact';
 
-    document.getElementById('field-name').value     = c.name           || '';
-    document.getElementById('field-email').value    = c.email          || '';
-    document.getElementById('field-phone').value    = c.phone          || '';
-    document.getElementById('field-social').value   = c.socialHandle   || '';
-    document.getElementById('field-how-met').value  = c.howWeMet       || '';
-    document.getElementById('field-pipeline').value = c.pipelineStatus || '';
-    document.getElementById('field-followup').value = c.followUpDate   || '';
-    document.getElementById('field-notes').value    = c.notes          || '';
+    document.getElementById('field-name').value     = c.name         || '';
+    document.getElementById('field-email').value    = c.email        || '';
+    document.getElementById('field-phone').value    = c.phone        || '';
+    document.getElementById('field-social').value   = c.socialHandle || '';
+    document.getElementById('field-how-met').value  = c.howWeMet     || '';
+    document.getElementById('field-followup').value = c.followUpDate || '';
+    document.getElementById('field-notes').value    = c.notes        || '';
 
-    populateCompanyDropdown(c.companyId || '');
+    initCompanyAutocomplete(c);
     renderTagCheckboxes(Array.isArray(c.tags) ? c.tags : []);
 
     openModal('modal-contact');
@@ -592,18 +632,21 @@ function openEditContactModal(id) {
 document.getElementById('contact-form').addEventListener('submit', async e => {
     e.preventDefault();
 
+    const companyText = coTextInput.value.trim();
+
     const data = {
-        name:           document.getElementById('field-name').value.trim(),
-        email:          document.getElementById('field-email').value.trim(),
-        phone:          document.getElementById('field-phone').value.trim(),
-        socialHandle:   document.getElementById('field-social').value.trim(),
-        howWeMet:       document.getElementById('field-how-met').value.trim(),
-        pipelineStatus: document.getElementById('field-pipeline').value,
-        companyId:      document.getElementById('field-company').value,
-        tags:           getCheckedTags(),
-        followUpDate:   document.getElementById('field-followup').value,
-        notes:          document.getElementById('field-notes').value.trim(),
-        updatedAt:      firebase.firestore.FieldValue.serverTimestamp()
+        name:        document.getElementById('field-name').value.trim(),
+        email:       document.getElementById('field-email').value.trim(),
+        phone:       document.getElementById('field-phone').value.trim(),
+        socialHandle:document.getElementById('field-social').value.trim(),
+        howWeMet:    document.getElementById('field-how-met').value.trim(),
+        // If user selected from autocomplete, link by ID; otherwise store as plain text
+        companyId:   selectedCompanyId || '',
+        companyName: selectedCompanyId ? '' : companyText,
+        tags:        getCheckedTags(),
+        followUpDate:document.getElementById('field-followup').value,
+        notes:       document.getElementById('field-notes').value.trim(),
+        updatedAt:   firebase.firestore.FieldValue.serverTimestamp()
     };
 
     const submitBtn = document.querySelector('#contact-form [type="submit"]');
@@ -638,7 +681,7 @@ async function deleteContact(id) {
 
     try {
         const actSnap = await db.collection('contacts').doc(id).collection('activities').get();
-        const batch = db.batch();
+        const batch   = db.batch();
         actSnap.docs.forEach(doc => batch.delete(doc.ref));
         batch.delete(db.collection('contacts').doc(id));
         await batch.commit();
@@ -683,7 +726,6 @@ document.getElementById('activity-note').addEventListener('keydown', e => {
 });
 
 document.getElementById('search-input').addEventListener('input', renderTable);
-document.getElementById('filter-pipeline').addEventListener('change', renderTable);
 document.getElementById('filter-tag').addEventListener('change', renderTable);
 
 // ========================================================
@@ -706,10 +748,6 @@ function fmtDateTime(date) {
         month: 'short', day: 'numeric', year: 'numeric',
         hour: 'numeric', minute: '2-digit'
     });
-}
-
-function slugify(str) {
-    return str.toLowerCase().replace(/\s+/g, '-');
 }
 
 function escHtml(str) {
@@ -736,7 +774,6 @@ auth.onAuthStateChanged(user => {
     } else {
         appEl.classList.add('hidden');
         loginPage.classList.remove('hidden');
-        // Reset state so stale data isn't shown on re-login
         contacts = []; companies = []; tags = [];
     }
 });
@@ -757,10 +794,10 @@ document.getElementById('login-form').addEventListener('submit', async e => {
         await auth.signInWithEmailAndPassword(email, password);
     } catch (err) {
         const messages = {
-            'auth/user-not-found':   'No account found with that email.',
-            'auth/wrong-password':   'Incorrect password.',
-            'auth/invalid-email':    'Please enter a valid email address.',
-            'auth/too-many-requests':'Too many attempts. Please try again later.',
+            'auth/user-not-found':     'No account found with that email.',
+            'auth/wrong-password':     'Incorrect password.',
+            'auth/invalid-email':      'Please enter a valid email address.',
+            'auth/too-many-requests':  'Too many attempts. Please try again later.',
             'auth/invalid-credential': 'Incorrect email or password.'
         };
         errorEl.textContent = messages[err.code] || err.message;
@@ -776,7 +813,7 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
 });
 
 // ========================================================
-// INIT — load everything in parallel
+// INIT
 // ========================================================
 async function init() {
     await Promise.all([loadTags(), loadCompanies()]);
