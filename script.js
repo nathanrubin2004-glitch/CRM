@@ -32,6 +32,13 @@ let activeFollowUpFilter = '';       // 'overdue' | 'thisweek' | 'upcoming' | ''
 let importHeaders = [];
 let importRows    = [];
 
+// ---- BULK SELECTION STATE ----
+let selectedContactIds = new Set();
+let bulkCompanyId = null;
+
+// ---- MERGE STATE ----
+let mergeTargetId = null;
+
 // ---- CRM FIELDS AVAILABLE FOR CSV MAPPING ----
 const CRM_IMPORT_FIELDS = [
     { value: '',             label: '— Skip —' },
@@ -54,10 +61,11 @@ function showView(id) {
     document.getElementById(id).classList.add('active');
     document.querySelectorAll('.nav-btn:not(.primary)').forEach(b => b.classList.remove('active'));
     const navMap = {
-        'view-dashboard': 'btn-nav-dashboard',
-        'view-list':      'btn-nav-contacts',
-        'view-detail':    'btn-nav-contacts',
-        'view-companies': 'btn-nav-companies'
+        'view-dashboard':    'btn-nav-dashboard',
+        'view-list':         'btn-nav-contacts',
+        'view-detail':       'btn-nav-contacts',
+        'view-companies':    'btn-nav-companies',
+        'view-notes-search': 'btn-nav-notes-search'
     };
     const navId = navMap[id];
     if (navId) document.getElementById(navId).classList.add('active');
@@ -93,6 +101,14 @@ async function loadTags() {
 
 function populateTagFilter() {
     populateTagPills();
+    populateBulkTagSelect();
+}
+
+function populateBulkTagSelect() {
+    const sel = document.getElementById('bulk-tag-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Assign Tag...</option>' +
+        tags.map(t => `<option value="${escHtml(t.name)}">${escHtml(t.name)}</option>`).join('');
 }
 
 function populateTagPills() {
@@ -468,14 +484,14 @@ coTextInput.addEventListener('blur', () => {
 
 async function loadContacts() {
     const tbody = document.getElementById('contacts-tbody');
-    tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading contacts...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="loading">Loading contacts...</td></tr>';
     try {
         const snap = await db.collection('contacts').orderBy('name').get();
         contacts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         populateCompanyFilter();
         renderTable();
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Error: ${escHtml(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Error: ${escHtml(err.message)}</td></tr>`;
     }
 }
 
@@ -489,11 +505,12 @@ function renderTable() {
         const coName = getDisplayCompany(c).toLowerCase();
 
         const matchSearch = !search ||
-            (c.name  && c.name.toLowerCase().includes(search)) ||
-            (c.email && c.email.toLowerCase().includes(search)) ||
-            (c.phone && c.phone.toLowerCase().includes(search)) ||
+            (c.name        && c.name.toLowerCase().includes(search)) ||
+            (c.email       && c.email.toLowerCase().includes(search)) ||
+            (c.phone       && c.phone.toLowerCase().includes(search)) ||
             coName.includes(search) ||
-            (c.notes && c.notes.toLowerCase().includes(search));
+            (c.currentRole && c.currentRole.toLowerCase().includes(search)) ||
+            (c.notes       && c.notes.toLowerCase().includes(search));
 
         const matchTag = !activeTagFilter || (Array.isArray(c.tags) && c.tags.includes(activeTagFilter));
 
@@ -521,17 +538,21 @@ function renderTable() {
         return 0;
     });
 
+    selectedContactIds.clear();
+
     if (sorted.length === 0) {
         const msg = contacts.length === 0
             ? 'No contacts yet. Add your first one!'
             : 'No contacts match your filters.';
-        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${msg}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${msg}</td></tr>`;
         updateSortHeaders();
+        updateBulkToolbar();
         return;
     }
 
     tbody.innerHTML = sorted.map(c => buildRow(c, today)).join('');
     updateSortHeaders();
+    updateBulkToolbar();
 }
 
 function updateSortHeaders() {
@@ -557,10 +578,13 @@ function buildRow(c, today) {
     const coHtml = coName ? `<span style="color:#555;font-size:12px">${escHtml(coName)}</span>` : '';
 
     const id = c.id;
+    const checked = selectedContactIds.has(id) ? 'checked' : '';
     return `
         <tr>
+            <td class="cb-col"><input type="checkbox" class="row-cb" data-id="${id}" ${checked} /></td>
             <td><button class="btn-link" onclick="viewContact('${id}')">${escHtml(c.name)}</button></td>
             <td>${coHtml}</td>
+            <td style="font-size:12px;color:#555">${escHtml(c.currentRole || '')}</td>
             <td>${c.email ? `<a href="mailto:${escHtml(c.email)}" style="color:#2c5aa0">${escHtml(c.email)}</a>` : ''}</td>
             <td>${escHtml(c.phone || '')}</td>
             <td>${tagsHtml}</td>
@@ -596,6 +620,7 @@ async function viewContact(id) {
             <h2>${escHtml(c.name)}</h2>
             <div class="contact-subtitle">
                 ${coHtml}
+                ${c.currentRole ? `<span style="color:#444;font-weight:500">${escHtml(c.currentRole)}</span>` : ''}
                 ${c.howWeMet ? `<span style="color:#666">Met via: ${escHtml(c.howWeMet)}</span>` : ''}
             </div>
             <div class="info-grid">
@@ -710,11 +735,12 @@ function openEditContactModal(id) {
     editingContactId = id;
     document.getElementById('contact-modal-title').textContent = 'Edit Contact';
 
-    document.getElementById('field-name').value     = c.name         || '';
-    document.getElementById('field-email').value    = c.email        || '';
-    document.getElementById('field-phone').value    = c.phone        || '';
-    document.getElementById('field-social').value   = c.socialHandle || '';
-    document.getElementById('field-how-met').value  = c.howWeMet     || '';
+    document.getElementById('field-name').value         = c.name         || '';
+    document.getElementById('field-email').value        = c.email        || '';
+    document.getElementById('field-phone').value        = c.phone        || '';
+    document.getElementById('field-social').value       = c.socialHandle || '';
+    document.getElementById('field-current-role').value = c.currentRole  || '';
+    document.getElementById('field-how-met').value      = c.howWeMet     || '';
     document.getElementById('field-followup').value = c.followUpDate || '';
     document.getElementById('field-notes').value    = c.notes        || '';
 
@@ -735,6 +761,7 @@ document.getElementById('contact-form').addEventListener('submit', async e => {
         email:       document.getElementById('field-email').value.trim(),
         phone:       document.getElementById('field-phone').value.trim(),
         socialHandle:document.getElementById('field-social').value.trim(),
+        currentRole: document.getElementById('field-current-role').value.trim(),
         howWeMet:    document.getElementById('field-how-met').value.trim(),
         // If user selected from autocomplete, link by ID; otherwise store as plain text
         companyId:   selectedCompanyId || '',
@@ -788,6 +815,358 @@ async function deleteContact(id) {
         }
     } catch (err) {
         alert('Error deleting contact: ' + err.message);
+    }
+}
+
+// ========================================================
+// BULK ACTIONS
+// ========================================================
+
+function getVisibleContactIds() {
+    return [...document.querySelectorAll('.row-cb')].map(cb => cb.dataset.id);
+}
+
+function updateBulkToolbar() {
+    const toolbar = document.getElementById('bulk-toolbar');
+    const count   = selectedContactIds.size;
+    if (count === 0) {
+        toolbar.classList.add('hidden');
+        const allCb = document.getElementById('select-all-cb');
+        if (allCb) { allCb.checked = false; allCb.indeterminate = false; }
+        return;
+    }
+    toolbar.classList.remove('hidden');
+    document.getElementById('bulk-count').textContent =
+        `${count} contact${count !== 1 ? 's' : ''} selected`;
+
+    const visibleIds = getVisibleContactIds();
+    const allSelected  = visibleIds.length > 0 && visibleIds.every(id => selectedContactIds.has(id));
+    const someSelected = visibleIds.some(id => selectedContactIds.has(id));
+    const allCb = document.getElementById('select-all-cb');
+    if (allCb) {
+        allCb.checked       = allSelected;
+        allCb.indeterminate = someSelected && !allSelected;
+    }
+}
+
+async function bulkAssignTag() {
+    const tagName = document.getElementById('bulk-tag-select').value;
+    if (!tagName) { alert('Please select a tag.'); return; }
+    if (selectedContactIds.size === 0) return;
+
+    const btn = document.getElementById('btn-bulk-tag');
+    btn.disabled = true;
+    try {
+        const ids = [...selectedContactIds];
+        const CHUNK = 400;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+            const batch = db.batch();
+            ids.slice(i, i + CHUNK).forEach(id => {
+                const c = contacts.find(x => x.id === id);
+                if (!c) return;
+                const newTags = [...new Set([...(Array.isArray(c.tags) ? c.tags : []), tagName])];
+                batch.update(db.collection('contacts').doc(id), { tags: newTags });
+            });
+            await batch.commit();
+        }
+        selectedContactIds.clear();
+        document.getElementById('bulk-tag-select').value = '';
+        await loadContacts();
+    } catch (err) {
+        alert('Error assigning tag: ' + err.message);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function bulkAssignCompany() {
+    const companyText = document.getElementById('bulk-company-input').value.trim();
+    if (!companyText) { alert('Please enter a company name.'); return; }
+    if (selectedContactIds.size === 0) return;
+
+    const btn = document.getElementById('btn-bulk-company');
+    btn.disabled = true;
+    try {
+        const ids = [...selectedContactIds];
+        const CHUNK = 400;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+            const batch = db.batch();
+            ids.slice(i, i + CHUNK).forEach(id => {
+                batch.update(db.collection('contacts').doc(id), {
+                    companyId:   bulkCompanyId || '',
+                    companyName: bulkCompanyId ? '' : companyText
+                });
+            });
+            await batch.commit();
+        }
+        selectedContactIds.clear();
+        document.getElementById('bulk-company-input').value = '';
+        bulkCompanyId = null;
+        await loadContacts();
+    } catch (err) {
+        alert('Error assigning company: ' + err.message);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function bulkDelete() {
+    const ids = [...selectedContactIds];
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} contact${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+    try {
+        for (const id of ids) {
+            const actSnap = await db.collection('contacts').doc(id).collection('activities').get();
+            const batch   = db.batch();
+            actSnap.docs.forEach(doc => batch.delete(doc.ref));
+            batch.delete(db.collection('contacts').doc(id));
+            await batch.commit();
+        }
+        selectedContactIds.clear();
+        await loadContacts();
+    } catch (err) {
+        alert('Error deleting contacts: ' + err.message);
+    }
+}
+
+// Bulk company autocomplete
+const bulkCoInput = document.getElementById('bulk-company-input');
+const bulkCoSugg  = document.getElementById('bulk-company-suggestions');
+
+bulkCoInput.addEventListener('input', () => {
+    const q = bulkCoInput.value.toLowerCase().trim();
+    bulkCompanyId = null;
+    if (!q) { bulkCoSugg.classList.add('hidden'); return; }
+    const matches = companies.filter(c => c.name.toLowerCase().includes(q)).slice(0, 8);
+    if (!matches.length) { bulkCoSugg.classList.add('hidden'); return; }
+    bulkCoSugg.innerHTML = matches.map(c =>
+        `<div class="suggestion-item" data-id="${c.id}" data-name="${escHtml(c.name)}">${escHtml(c.name)}</div>`
+    ).join('');
+    bulkCoSugg.classList.remove('hidden');
+});
+
+bulkCoSugg.addEventListener('mousedown', e => {
+    const item = e.target.closest('.suggestion-item');
+    if (!item) return;
+    bulkCompanyId     = item.dataset.id;
+    bulkCoInput.value = item.dataset.name;
+    bulkCoSugg.classList.add('hidden');
+});
+
+bulkCoInput.addEventListener('blur', () => {
+    setTimeout(() => bulkCoSugg.classList.add('hidden'), 150);
+});
+
+// ========================================================
+// NOTES SEARCH
+// ========================================================
+
+let notesSearchTimer = null;
+
+async function searchNotes() {
+    const query   = document.getElementById('notes-search-input').value.trim();
+    const results = document.getElementById('notes-search-results');
+    if (!query) { results.innerHTML = ''; return; }
+
+    results.innerHTML = '<div class="loading">Searching...</div>';
+    try {
+        const snap = await db.collectionGroup('activities')
+            .orderBy('createdAt', 'desc')
+            .limit(500)
+            .get();
+
+        const q = query.toLowerCase();
+        const matches = [];
+        snap.docs.forEach(doc => {
+            const data = doc.data();
+            if (data.note && data.note.toLowerCase().includes(q)) {
+                const contactId = doc.ref.parent.parent.id;
+                const contact   = contacts.find(c => c.id === contactId);
+                matches.push({
+                    note:        data.note,
+                    createdAt:   data.createdAt ? data.createdAt.toDate() : new Date(),
+                    contactId,
+                    contactName: contact ? contact.name : 'Unknown'
+                });
+            }
+        });
+
+        if (!matches.length) {
+            results.innerHTML = '<div class="empty-state">No notes found matching that search.</div>';
+            return;
+        }
+
+        results.innerHTML = `
+            <div class="notes-result-count">${matches.length} note${matches.length !== 1 ? 's' : ''} found</div>
+            ${matches.map(m => `
+                <div class="note-result">
+                    <div class="note-result-header">
+                        <button class="btn-link" onclick="viewContact('${m.contactId}')">${escHtml(m.contactName)}</button>
+                        <span class="note-result-time">${fmtDateTime(m.createdAt)}</span>
+                    </div>
+                    <div class="note-result-text">${highlightText(m.note, query)}</div>
+                </div>`).join('')}`;
+    } catch (err) {
+        results.innerHTML = `<div class="empty-state">Error: ${escHtml(err.message)}</div>`;
+    }
+}
+
+function highlightText(note, query) {
+    const safe = escHtml(note);
+    if (!query) return safe;
+    try {
+        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return safe.replace(new RegExp(escHtml(escaped), 'gi'), m => `<mark class="hl">${m}</mark>`);
+    } catch { return safe; }
+}
+
+// ========================================================
+// CONTACT MERGING
+// ========================================================
+
+function openMergeModal() {
+    if (!currentContactId) return;
+    mergeTargetId = null;
+    const base = contacts.find(c => c.id === currentContactId);
+    document.getElementById('merge-base-name').textContent = base ? `"${base.name}"` : 'this contact';
+    document.getElementById('merge-search-input').value = '';
+    document.getElementById('merge-search-results').innerHTML = '';
+    document.getElementById('merge-step-search').classList.remove('hidden');
+    document.getElementById('merge-step-confirm').classList.add('hidden');
+    openModal('modal-merge');
+    document.getElementById('merge-search-input').focus();
+}
+
+function renderMergeSearchResults(query) {
+    const container = document.getElementById('merge-search-results');
+    if (!query.trim()) { container.innerHTML = ''; return; }
+    const q = query.toLowerCase();
+    const results = contacts
+        .filter(c => c.id !== currentContactId && c.name && c.name.toLowerCase().includes(q))
+        .slice(0, 10);
+    if (!results.length) {
+        container.innerHTML = '<div class="empty-state" style="padding:12px">No contacts found.</div>';
+        return;
+    }
+    container.innerHTML = results.map(c => {
+        const coName = getDisplayCompany(c);
+        return `
+            <div class="merge-result-item" onclick="selectMergeTarget('${c.id}')">
+                <div class="merge-result-name">${escHtml(c.name)}</div>
+                ${coName ? `<div class="merge-result-co">${escHtml(coName)}</div>` : ''}
+            </div>`;
+    }).join('');
+}
+
+async function selectMergeTarget(targetId) {
+    mergeTargetId = targetId;
+    const keepC   = contacts.find(c => c.id === currentContactId);
+    const delC    = contacts.find(c => c.id === targetId);
+    if (!keepC || !delC) return;
+
+    const mergedTags = [...new Set([
+        ...(Array.isArray(keepC.tags) ? keepC.tags : []),
+        ...(Array.isArray(delC.tags)  ? delC.tags  : [])
+    ])];
+    const tagHtml = mergedTags.length
+        ? mergedTags.map(t => `<span class="tag">${escHtml(t)}</span>`).join(' ')
+        : '<span style="color:#aaa">None</span>';
+
+    // Count activities for each
+    let keepCount = 0, delCount = 0;
+    try {
+        const [ks, ds] = await Promise.all([
+            db.collection('contacts').doc(currentContactId).collection('activities').get(),
+            db.collection('contacts').doc(targetId).collection('activities').get()
+        ]);
+        keepCount = ks.size;
+        delCount  = ds.size;
+    } catch { /* non-critical */ }
+
+    document.getElementById('merge-confirm-content').innerHTML = `
+        <div class="merge-comparison">
+            <div class="merge-keep-col">
+                <div class="merge-col-label keep-label">KEEP</div>
+                <div class="merge-col-name">${escHtml(keepC.name)}</div>
+                ${keepC.email ? `<div class="merge-col-detail">${escHtml(keepC.email)}</div>` : ''}
+                ${getDisplayCompany(keepC) ? `<div class="merge-col-detail">${escHtml(getDisplayCompany(keepC))}</div>` : ''}
+                <div class="merge-col-detail">${keepCount} existing note${keepCount !== 1 ? 's' : ''}</div>
+            </div>
+            <div class="merge-plus">+</div>
+            <div class="merge-del-col">
+                <div class="merge-col-label del-label">DELETE</div>
+                <div class="merge-col-name">${escHtml(delC.name)}</div>
+                ${delC.email ? `<div class="merge-col-detail">${escHtml(delC.email)}</div>` : ''}
+                ${getDisplayCompany(delC) ? `<div class="merge-col-detail">${escHtml(getDisplayCompany(delC))}</div>` : ''}
+                <div class="merge-col-detail">${delCount} note${delCount !== 1 ? 's' : ''} will be moved</div>
+                ${delC.notes ? `<div class="merge-col-detail" style="color:#c82333">Notes field will be appended as an activity</div>` : ''}
+            </div>
+        </div>
+        <div class="merge-result-preview">
+            <strong>Merged tags:</strong> ${tagHtml}
+        </div>`;
+
+    document.getElementById('merge-step-search').classList.add('hidden');
+    document.getElementById('merge-step-confirm').classList.remove('hidden');
+}
+
+async function executeMerge() {
+    if (!currentContactId || !mergeTargetId) return;
+    const keepC = contacts.find(c => c.id === currentContactId);
+    const delC  = contacts.find(c => c.id === mergeTargetId);
+    if (!keepC || !delC) return;
+
+    const btn = document.getElementById('btn-merge-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Merging...';
+
+    try {
+        const keepRef = db.collection('contacts').doc(currentContactId);
+        const delRef  = db.collection('contacts').doc(mergeTargetId);
+
+        // Fetch all source activities
+        const srcSnap = await delRef.collection('activities').get();
+
+        // Copy source activities + delete them in chunks of 200 (set+delete = 2 ops each)
+        const CHUNK = 200;
+        const srcDocs = srcSnap.docs;
+        for (let i = 0; i < srcDocs.length; i += CHUNK) {
+            const batch = db.batch();
+            srcDocs.slice(i, i + CHUNK).forEach(doc => {
+                batch.set(keepRef.collection('activities').doc(), doc.data());
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+        }
+
+        // Final batch: merge annotation + update keep contact + delete source
+        const mergedTags = [...new Set([
+            ...(Array.isArray(keepC.tags) ? keepC.tags : []),
+            ...(Array.isArray(delC.tags)  ? delC.tags  : [])
+        ])];
+
+        const finalBatch = db.batch();
+        const mergeNote = `[Merged from "${delC.name}"]${delC.notes ? `\nOriginal notes: ${delC.notes}` : ''}`;
+        finalBatch.set(keepRef.collection('activities').doc(), {
+            note: mergeNote,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        finalBatch.update(keepRef, {
+            tags: mergedTags,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        finalBatch.delete(delRef);
+        await finalBatch.commit();
+
+        closeModal('modal-merge');
+        mergeTargetId = null;
+        await loadContacts();
+        viewContact(currentContactId);
+    } catch (err) {
+        alert('Merge error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Merge & Delete Duplicate';
     }
 }
 
@@ -974,8 +1353,6 @@ document.getElementById('import-csv-file').addEventListener('change', e => {
             `<div class="import-preview-scroll"><table class="data-table"><thead><tr>${thHtml}</tr></thead><tbody>${trHtml}</tbody></table></div>`;
 
         // Mapping rows
-        const fieldOpts = CRM_IMPORT_FIELDS.map(f =>
-            `<option value="${f.value}">${escHtml(f.label)}</option>`).join('');
         document.getElementById('import-map-body').innerHTML = importHeaders.map((h, i) => {
             const auto = autoMapColumn(h);
             const opts = CRM_IMPORT_FIELDS.map(f =>
@@ -1101,7 +1478,68 @@ document.getElementById('btn-nav-contacts').addEventListener('click', () => {
     renderTable();
 });
 
+document.getElementById('btn-nav-notes-search').addEventListener('click', () => {
+    showView('view-notes-search');
+    document.getElementById('notes-search-input').focus();
+});
+
 document.getElementById('btn-import-csv').addEventListener('click', openImportModal);
+
+// ---- Bulk selection ----
+document.getElementById('select-all-cb').addEventListener('change', e => {
+    const visibleIds = getVisibleContactIds();
+    if (e.target.checked) {
+        visibleIds.forEach(id => selectedContactIds.add(id));
+    } else {
+        visibleIds.forEach(id => selectedContactIds.delete(id));
+    }
+    document.querySelectorAll('.row-cb').forEach(cb => {
+        cb.checked = selectedContactIds.has(cb.dataset.id);
+    });
+    updateBulkToolbar();
+});
+
+document.getElementById('contacts-tbody').addEventListener('change', e => {
+    if (!e.target.matches('.row-cb')) return;
+    const id = e.target.dataset.id;
+    e.target.checked ? selectedContactIds.add(id) : selectedContactIds.delete(id);
+    updateBulkToolbar();
+});
+
+document.getElementById('btn-bulk-tag').addEventListener('click', bulkAssignTag);
+document.getElementById('btn-bulk-company').addEventListener('click', bulkAssignCompany);
+document.getElementById('btn-bulk-delete').addEventListener('click', bulkDelete);
+document.getElementById('btn-bulk-clear').addEventListener('click', () => {
+    selectedContactIds.clear();
+    document.querySelectorAll('.row-cb').forEach(cb => cb.checked = false);
+    updateBulkToolbar();
+});
+
+// ---- Notes search ----
+document.getElementById('notes-search-input').addEventListener('input', () => {
+    clearTimeout(notesSearchTimer);
+    notesSearchTimer = setTimeout(searchNotes, 400);
+});
+document.getElementById('notes-search-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(notesSearchTimer); searchNotes(); }
+});
+document.getElementById('btn-notes-search').addEventListener('click', () => {
+    clearTimeout(notesSearchTimer); searchNotes();
+});
+
+// ---- Merge ----
+document.getElementById('btn-merge-contact').addEventListener('click', openMergeModal);
+
+document.getElementById('merge-search-input').addEventListener('input', e => {
+    renderMergeSearchResults(e.target.value);
+});
+
+document.getElementById('btn-merge-back').addEventListener('click', () => {
+    document.getElementById('merge-step-confirm').classList.add('hidden');
+    document.getElementById('merge-step-search').classList.remove('hidden');
+});
+
+document.getElementById('btn-merge-confirm').addEventListener('click', executeMerge);
 
 document.getElementById('btn-add-contact').addEventListener('click', openAddContactModal);
 

@@ -38,6 +38,7 @@
                     <button id="btn-nav-dashboard" class="nav-btn active">Dashboard</button>
                     <button id="btn-nav-contacts" class="nav-btn">Contacts</button>
                     <button id="btn-nav-companies" class="nav-btn">Companies</button>
+                    <button id="btn-nav-notes-search" class="nav-btn">Search Notes</button>
                     <button id="btn-nav-tags" class="nav-btn">Manage Tags</button>
                     <button id="btn-add-contact" class="nav-btn primary">+ Add Contact</button>
                     <button id="btn-logout" class="nav-btn logout">Sign Out</button>
@@ -52,6 +53,15 @@
                 <div id="dashboard-content">
                     <div class="loading" style="padding:40px;text-align:center">Loading dashboard...</div>
                 </div>
+            </div>
+
+            <!-- ==================== NOTES SEARCH VIEW ==================== -->
+            <div id="view-notes-search" class="view">
+                <div class="toolbar toolbar-row" style="margin-bottom:16px">
+                    <input type="text" id="notes-search-input" placeholder="Search across all activity notes..." />
+                    <button id="btn-notes-search" class="btn-primary">Search</button>
+                </div>
+                <div id="notes-search-results"></div>
             </div>
 
             <!-- ==================== CONTACTS LIST VIEW ==================== -->
@@ -71,11 +81,31 @@
                     </div>
                     <div id="tag-pills-row" class="tag-pills-row"></div>
                 </div>
+                <!-- Bulk Actions Toolbar -->
+                <div id="bulk-toolbar" class="bulk-toolbar hidden">
+                    <span id="bulk-count" class="bulk-count"></span>
+                    <div class="bulk-actions">
+                        <div class="bulk-action-group">
+                            <select id="bulk-tag-select"><option value="">Assign Tag...</option></select>
+                            <button id="btn-bulk-tag" class="btn-secondary btn-sm">Apply</button>
+                        </div>
+                        <div class="bulk-action-group" style="position:relative">
+                            <input type="text" id="bulk-company-input" placeholder="Assign Company..." class="bulk-company-input" autocomplete="off" />
+                            <div id="bulk-company-suggestions" class="suggestions-dropdown hidden"></div>
+                            <button id="btn-bulk-company" class="btn-secondary btn-sm">Apply</button>
+                        </div>
+                        <button id="btn-bulk-delete" class="btn-danger btn-sm">Delete Selected</button>
+                    </div>
+                    <button id="btn-bulk-clear" class="btn-link" style="margin-left:auto;font-size:12px">Clear selection</button>
+                </div>
+
                 <table class="data-table" id="contacts-table">
                     <thead>
                         <tr>
+                            <th class="cb-col"><input type="checkbox" id="select-all-cb" title="Select all" /></th>
                             <th data-sort="name" class="sortable">Name <span class="sort-arrow"></span></th>
                             <th data-sort="company" class="sortable">Company <span class="sort-arrow"></span></th>
+                            <th data-sort="currentRole" class="sortable">Current Role <span class="sort-arrow"></span></th>
                             <th data-sort="email" class="sortable">Email <span class="sort-arrow"></span></th>
                             <th data-sort="phone" class="sortable">Phone <span class="sort-arrow"></span></th>
                             <th>Tags</th>
@@ -92,6 +122,7 @@
                 <div class="detail-header">
                     <button id="btn-back" class="btn-secondary">&#8592; Back to Contacts</button>
                     <button id="btn-edit-contact" class="btn-primary">Edit Contact</button>
+                    <button id="btn-merge-contact" class="btn-secondary">Merge Contact</button>
                     <button id="btn-delete-contact" class="btn-danger">Delete</button>
                 </div>
                 <div id="contact-detail-content"></div>
@@ -164,6 +195,10 @@
                             <label>Social Handle</label>
                             <input type="text" id="field-social" placeholder="@username or profile URL" />
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Role</label>
+                        <input type="text" id="field-current-role" placeholder="Title at Company, e.g. VP of Engineering at Acme" />
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -252,6 +287,35 @@
                         <button id="btn-save-new-tag" class="btn-primary">Add Tag</button>
                     </div>
                     <div id="tags-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MERGE CONTACTS MODAL ==================== -->
+        <div id="modal-merge" class="modal-overlay hidden">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>Merge Contacts</h2>
+                    <button class="modal-close-btn" data-modal="modal-merge">&times;</button>
+                </div>
+                <div class="modal-body">
+
+                    <!-- Step 1: Search -->
+                    <div id="merge-step-search">
+                        <p class="import-hint">Search for the contact to merge. <strong id="merge-base-name"></strong> will be kept as the base — its data is preserved and all notes from both contacts are combined.</p>
+                        <input type="text" id="merge-search-input" class="merge-search-input" placeholder="Type a contact name to search..." autocomplete="off" />
+                        <div id="merge-search-results" class="merge-search-results"></div>
+                    </div>
+
+                    <!-- Step 2: Confirm -->
+                    <div id="merge-step-confirm" class="hidden">
+                        <div id="merge-confirm-content"></div>
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" id="btn-merge-back">Back</button>
+                            <button type="button" class="btn-danger" id="btn-merge-confirm">Merge &amp; Delete Duplicate</button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>

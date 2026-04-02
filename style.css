@@ -1131,3 +1131,221 @@ main {
     font-size: 14px;
     color: #1e4d2b;
 }
+
+/* ================================================================
+   BULK ACTIONS
+   ================================================================ */
+
+.cb-col {
+    width: 32px;
+    text-align: center;
+    padding: 8px 4px 8px 10px !important;
+}
+
+.bulk-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #eef2fb;
+    border: 1px solid #c2cfe0;
+    border-radius: 4px;
+    padding: 8px 14px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.bulk-count {
+    font-size: 13px;
+    font-weight: bold;
+    color: #1a3a70;
+    white-space: nowrap;
+}
+
+.bulk-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.bulk-action-group {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.bulk-action-group select,
+.bulk-company-input {
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 12px;
+    background: white;
+}
+
+.bulk-company-input {
+    width: 160px;
+}
+
+/* ================================================================
+   NOTES SEARCH
+   ================================================================ */
+
+#notes-search-input {
+    flex: 1;
+    min-width: 200px;
+}
+
+.notes-result-count {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 10px;
+    font-style: italic;
+}
+
+.note-result {
+    background: white;
+    border: 1px solid #d0d7e2;
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+}
+
+.note-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.note-result-time {
+    font-size: 11px;
+    color: #999;
+}
+
+.note-result-text {
+    font-size: 13px;
+    color: #444;
+    white-space: pre-wrap;
+    line-height: 1.5;
+}
+
+mark.hl {
+    background: #fff176;
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+/* ================================================================
+   CONTACT MERGING
+   ================================================================ */
+
+.merge-search-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 13px;
+    font-family: inherit;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.merge-search-input:focus {
+    outline: none;
+    border-color: #2c5aa0;
+    box-shadow: 0 0 0 2px rgba(44,90,160,0.1);
+}
+
+.merge-search-results {
+    border: 1px solid #d0d7e2;
+    border-radius: 3px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.merge-result-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid #edf0f5;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.merge-result-item:last-child { border-bottom: none; }
+.merge-result-item:hover { background: #eef2fb; }
+
+.merge-result-name {
+    font-weight: bold;
+    font-size: 13px;
+    color: #1a3a70;
+}
+
+.merge-result-co {
+    font-size: 12px;
+    color: #888;
+    margin-top: 2px;
+}
+
+.merge-comparison {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 16px;
+    background: #f8faff;
+    border: 1px solid #d0d7e2;
+    border-radius: 4px;
+}
+
+.merge-keep-col,
+.merge-del-col {
+    padding: 12px 14px;
+    border-radius: 4px;
+}
+
+.merge-keep-col { background: #f0fff4; border: 1px solid #b2dfdb; }
+.merge-del-col  { background: #fff5f5; border: 1px solid #f5c2c7; }
+
+.merge-col-label {
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.keep-label { color: #1e7e34; }
+.del-label  { color: #c82333; }
+
+.merge-col-name {
+    font-size: 15px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 4px;
+}
+
+.merge-col-detail {
+    font-size: 12px;
+    color: #666;
+    margin-top: 3px;
+}
+
+.merge-plus {
+    font-size: 24px;
+    color: #aaa;
+    text-align: center;
+    font-weight: bold;
+}
+
+.merge-result-preview {
+    padding: 10px 14px;
+    background: #f0f2f5;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #444;
+}
