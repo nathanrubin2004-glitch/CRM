@@ -28,12 +28,33 @@ let activeTagFilter     = '';
 let activeCompanyFilter = '';
 let activeFollowUpFilter = '';       // 'overdue' | 'thisweek' | 'upcoming' | ''
 
+// ---- IMPORT STATE ----
+let importHeaders = [];
+let importRows    = [];
+
+// ---- CRM FIELDS AVAILABLE FOR CSV MAPPING ----
+const CRM_IMPORT_FIELDS = [
+    { value: '',             label: '— Skip —' },
+    { value: 'name',         label: 'Name' },
+    { value: 'firstName',    label: 'First Name' },
+    { value: 'lastName',     label: 'Last Name' },
+    { value: 'email',        label: 'Email' },
+    { value: 'phone',        label: 'Phone' },
+    { value: 'companyName',  label: 'Company' },
+    { value: 'socialHandle', label: 'Social / URL' },
+    { value: 'howWeMet',     label: 'How We Met' },
+    { value: 'notes',        label: 'Notes' },
+    { value: 'tags',         label: 'Tags (comma-separated)' },
+    { value: 'followUpDate', label: 'Follow-Up Date' },
+];
+
 // ---- VIEW SWITCHING ----
 function showView(id) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     document.querySelectorAll('.nav-btn:not(.primary)').forEach(b => b.classList.remove('active'));
     const navMap = {
+        'view-dashboard': 'btn-nav-dashboard',
         'view-list':      'btn-nav-contacts',
         'view-detail':    'btn-nav-contacts',
         'view-companies': 'btn-nav-companies'
@@ -653,9 +674,15 @@ async function addActivity() {
     btn.textContent = 'Saving...';
 
     try {
+        const ts = firebase.firestore.FieldValue.serverTimestamp();
         await db.collection('contacts').doc(currentContactId)
             .collection('activities')
-            .add({ note, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+            .add({ note, createdAt: ts });
+        await db.collection('contacts').doc(currentContactId)
+            .update({ lastActivityAt: ts });
+        // update in-memory contact too
+        const c = contacts.find(x => x.id === currentContactId);
+        if (c) c.lastActivityAt = { toDate: () => new Date() };
         ta.value = '';
         loadActivityLog(currentContactId);
     } catch (err) {
@@ -765,13 +792,316 @@ async function deleteContact(id) {
 }
 
 // ========================================================
+// DASHBOARD
+// ========================================================
+
+async function renderDashboard() {
+    const el = document.getElementById('dashboard-content');
+    el.innerHTML = '<div class="loading" style="padding:40px;text-align:center">Loading dashboard...</div>';
+
+    const today         = todayDate();
+    const weekEnd       = weekEndDate();
+    const sevenDaysAgo  = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const overdue       = contacts.filter(c => c.followUpDate && c.followUpDate < today);
+    const dueThisWeek   = contacts.filter(c => c.followUpDate && c.followUpDate >= today && c.followUpDate <= weekEnd);
+    const recentlyAdded = contacts.filter(c => c.createdAt && c.createdAt.toDate() > sevenDaysAgo);
+    const goingCold     = contacts.filter(c => {
+        if (c.createdAt && c.createdAt.toDate() > thirtyDaysAgo) return false;
+        if (c.lastActivityAt && c.lastActivityAt.toDate() > thirtyDaysAgo) return false;
+        return true;
+    });
+
+    const recentActivity = await loadRecentActivities();
+
+    const nameLink = c => `<button class="btn-link" onclick="viewContact('${c.id}')">${escHtml(c.name)}</button>`;
+    const sectionList = (items, emptyMsg) => items.length === 0
+        ? `<div class="dash-empty">${emptyMsg}</div>`
+        : `<ul class="dash-list">${items.map(c => `<li>${nameLink(c)}</li>`).join('')}</ul>`;
+
+    el.innerHTML = `
+        <div class="dash-stats">
+            <div class="dash-stat-card">
+                <div class="dash-stat-number">${contacts.length}</div>
+                <div class="dash-stat-label">Total Contacts</div>
+            </div>
+            <div class="dash-stat-card stat-overdue">
+                <div class="dash-stat-number">${overdue.length}</div>
+                <div class="dash-stat-label">Overdue Follow-Ups</div>
+            </div>
+            <div class="dash-stat-card stat-week">
+                <div class="dash-stat-number">${dueThisWeek.length}</div>
+                <div class="dash-stat-label">Due This Week</div>
+            </div>
+            <div class="dash-stat-card stat-new">
+                <div class="dash-stat-number">${recentlyAdded.length}</div>
+                <div class="dash-stat-label">Added Last 7 Days</div>
+            </div>
+        </div>
+
+        <div class="dash-columns">
+            <div class="dash-section">
+                <h3 class="dash-section-title">Overdue Follow-Ups <span class="dash-count">${overdue.length}</span></h3>
+                ${sectionList(overdue, 'No overdue follow-ups.')}
+            </div>
+            <div class="dash-section">
+                <h3 class="dash-section-title">Due This Week <span class="dash-count">${dueThisWeek.length}</span></h3>
+                ${sectionList(dueThisWeek, 'Nothing due this week.')}
+            </div>
+            <div class="dash-section">
+                <h3 class="dash-section-title">Added Last 7 Days <span class="dash-count">${recentlyAdded.length}</span></h3>
+                ${sectionList(recentlyAdded, 'No new contacts this week.')}
+            </div>
+            <div class="dash-section">
+                <h3 class="dash-section-title">Going Cold <span class="dash-count">${goingCold.length}</span></h3>
+                <div class="dash-section-note">No activity in 30+ days</div>
+                ${sectionList(goingCold, 'All contacts are active.')}
+            </div>
+        </div>
+
+        <div class="dash-section dash-feed">
+            <h3 class="dash-section-title">Recent Activity</h3>
+            ${recentActivity.length === 0
+                ? '<div class="dash-empty">No activity logged yet.</div>'
+                : recentActivity.map(a => `
+                    <div class="dash-feed-item">
+                        <div class="dash-feed-header">
+                            <button class="btn-link" onclick="viewContact('${a.contactId}')">${escHtml(a.contactName)}</button>
+                            <span class="dash-feed-time">${fmtDateTime(a.createdAt)}</span>
+                        </div>
+                        <div class="dash-feed-note">${escHtml(a.note)}</div>
+                    </div>`).join('')
+            }
+        </div>`;
+}
+
+async function loadRecentActivities() {
+    try {
+        const snap = await db.collectionGroup('activities')
+            .orderBy('createdAt', 'desc')
+            .limit(10)
+            .get();
+        return snap.docs.map(doc => {
+            const data      = doc.data();
+            const contactId = doc.ref.parent.parent.id;
+            const contact   = contacts.find(c => c.id === contactId);
+            return {
+                contactId,
+                contactName: contact ? contact.name : 'Unknown',
+                note: data.note || '',
+                createdAt: data.createdAt ? data.createdAt.toDate() : new Date()
+            };
+        });
+    } catch (err) {
+        console.warn('Recent activity feed unavailable:', err.message);
+        return [];
+    }
+}
+
+// ========================================================
+// CSV IMPORT
+// ========================================================
+
+function openImportModal() {
+    importHeaders = [];
+    importRows    = [];
+    document.getElementById('import-csv-file').value = '';
+    document.getElementById('import-file-name').textContent = 'No file selected';
+    document.getElementById('import-step-upload').classList.remove('hidden');
+    document.getElementById('import-step-map').classList.add('hidden');
+    document.getElementById('import-step-result').classList.add('hidden');
+    openModal('modal-import');
+}
+
+function parseCSV(text) {
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i], next = text[i + 1];
+        if (inQuotes) {
+            if (ch === '"' && next === '"') { field += '"'; i++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { field += ch; }
+        } else {
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === ',') { row.push(field); field = ''; }
+            else if (ch === '\n' || ch === '\r') {
+                if (ch === '\r' && next === '\n') i++;
+                row.push(field); field = '';
+                if (row.length > 1 || row[0] !== '') rows.push(row);
+                row = [];
+            } else { field += ch; }
+        }
+    }
+    if (field || row.length) { row.push(field); if (row.length > 1 || row[0] !== '') rows.push(row); }
+    return rows;
+}
+
+function autoMapColumn(header) {
+    const h = header.toLowerCase().trim();
+    if (['name','full name','contact name','display name'].includes(h)) return 'name';
+    if (['first name','given name','firstname'].includes(h)) return 'firstName';
+    if (['last name','family name','surname','lastname'].includes(h)) return 'lastName';
+    if (h === 'email' || h === 'email address' || h.startsWith('e-mail') || h.includes('email 1 - value')) return 'email';
+    if (h === 'phone' || h === 'phone number' || h.includes('phone 1 - value') || h.includes('mobile') || h.includes('cell')) return 'phone';
+    if (['company','organization','organization name','company name'].includes(h)) return 'companyName';
+    if (['notes','note','description'].includes(h)) return 'notes';
+    if (['tags','labels','label','group membership'].includes(h)) return 'tags';
+    if (['url','profile url','linkedin url'].includes(h)) return 'socialHandle';
+    return '';
+}
+
+document.getElementById('import-csv-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('import-file-name').textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const allRows = parseCSV(ev.target.result);
+        if (allRows.length < 2) { alert('CSV appears empty or has no data rows.'); return; }
+        importHeaders = allRows[0];
+        importRows    = allRows.slice(1);
+
+        // Preview table (first 5 rows)
+        const previewRows = importRows.slice(0, 5);
+        const thHtml = importHeaders.map(h => `<th>${escHtml(h)}</th>`).join('');
+        const trHtml = previewRows.map(r => {
+            const cells = importHeaders.map((_, i) => `<td>${escHtml(r[i] || '')}</td>`).join('');
+            return `<tr>${cells}</tr>`;
+        }).join('');
+        document.getElementById('import-preview-wrap').innerHTML =
+            `<div class="import-preview-scroll"><table class="data-table"><thead><tr>${thHtml}</tr></thead><tbody>${trHtml}</tbody></table></div>`;
+
+        // Mapping rows
+        const fieldOpts = CRM_IMPORT_FIELDS.map(f =>
+            `<option value="${f.value}">${escHtml(f.label)}</option>`).join('');
+        document.getElementById('import-map-body').innerHTML = importHeaders.map((h, i) => {
+            const auto = autoMapColumn(h);
+            const opts = CRM_IMPORT_FIELDS.map(f =>
+                `<option value="${f.value}"${f.value === auto ? ' selected' : ''}>${escHtml(f.label)}</option>`
+            ).join('');
+            return `<tr>
+                <td class="import-col-name">${escHtml(h)}</td>
+                <td><select class="import-field-sel" data-col="${i}">${opts}</select></td>
+            </tr>`;
+        }).join('');
+
+        document.getElementById('btn-import-run').textContent = `Import ${importRows.length} Contact${importRows.length !== 1 ? 's' : ''}`;
+
+        document.getElementById('import-step-upload').classList.add('hidden');
+        document.getElementById('import-step-map').classList.remove('hidden');
+    };
+    reader.readAsText(file);
+});
+
+document.getElementById('btn-import-back').addEventListener('click', () => {
+    document.getElementById('import-step-map').classList.add('hidden');
+    document.getElementById('import-step-upload').classList.remove('hidden');
+});
+
+document.getElementById('btn-import-run').addEventListener('click', async () => {
+    const mapping = {};
+    document.querySelectorAll('.import-field-sel').forEach(sel => {
+        if (sel.value) mapping[parseInt(sel.dataset.col)] = sel.value;
+    });
+
+    if (!Object.values(mapping).some(v => v === 'name' || v === 'firstName' || v === 'lastName')) {
+        alert('Please map at least a Name, First Name, or Last Name column.');
+        return;
+    }
+
+    const btn = document.getElementById('btn-import-run');
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+
+    let imported = 0, skipped = 0;
+    const batchSize = 400;
+
+    try {
+        for (let start = 0; start < importRows.length; start += batchSize) {
+            const batch = db.batch();
+            const chunk = importRows.slice(start, start + batchSize);
+            for (const row of chunk) {
+                const raw = {};
+                Object.entries(mapping).forEach(([colIdx, field]) => {
+                    raw[field] = (row[parseInt(colIdx)] || '').trim();
+                });
+
+                // Build name from parts
+                let name = raw.name || '';
+                if (!name && (raw.firstName || raw.lastName)) {
+                    name = [raw.firstName, raw.lastName].filter(Boolean).join(' ');
+                }
+                if (!name) { skipped++; continue; }
+
+                // Clean up tags from Google Contacts "* myContacts ::: Tag" format
+                let tagsArr = [];
+                if (raw.tags) {
+                    tagsArr = raw.tags.split(/[\s]*:::\s*|[;,]/)
+                        .map(t => t.replace(/^\*\s*/, '').trim())
+                        .filter(t => t && t.toLowerCase() !== 'mycontacts' && t !== '*');
+                }
+
+                const contact = {
+                    name,
+                    email:        raw.email        || '',
+                    phone:        raw.phone         || '',
+                    companyName:  raw.companyName   || '',
+                    companyId:    '',
+                    socialHandle: raw.socialHandle  || '',
+                    howWeMet:     raw.howWeMet      || '',
+                    notes:        raw.notes         || '',
+                    tags:         tagsArr,
+                    followUpDate: raw.followUpDate  || '',
+                    createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+                };
+                batch.set(db.collection('contacts').doc(), contact);
+                imported++;
+            }
+            await batch.commit();
+        }
+
+        document.getElementById('import-step-map').classList.add('hidden');
+        document.getElementById('import-result-msg').innerHTML = `
+            <div class="import-success">
+                <div class="import-success-icon">&#10003;</div>
+                <div class="import-success-text">
+                    <strong>${imported} contact${imported !== 1 ? 's' : ''} imported successfully.</strong>
+                    ${skipped ? `<div style="color:#888;margin-top:4px">${skipped} row${skipped !== 1 ? 's' : ''} skipped (no name found).</div>` : ''}
+                </div>
+            </div>`;
+        document.getElementById('import-step-result').classList.remove('hidden');
+        await loadContacts();
+    } catch (err) {
+        alert('Import error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = `Import ${importRows.length} Contacts`;
+    }
+});
+
+document.getElementById('btn-import-done').addEventListener('click', () => {
+    closeModal('modal-import');
+    showView('view-list');
+    renderTable();
+});
+
+// ========================================================
 // EVENT LISTENERS
 // ========================================================
+
+document.getElementById('btn-nav-dashboard').addEventListener('click', () => {
+    showView('view-dashboard');
+    renderDashboard();
+});
 
 document.getElementById('btn-nav-contacts').addEventListener('click', () => {
     showView('view-list');
     renderTable();
 });
+
+document.getElementById('btn-import-csv').addEventListener('click', openImportModal);
 
 document.getElementById('btn-add-contact').addEventListener('click', openAddContactModal);
 
@@ -919,7 +1249,9 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
 // INIT
 // ========================================================
 async function init() {
+    showView('view-dashboard');
     await Promise.all([loadTags(), loadCompanies()]);
     populateTagFilter();
     await loadContacts();
+    renderDashboard();
 }

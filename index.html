@@ -35,7 +35,8 @@
             <div class="header-inner">
                 <h1>Networking CRM</h1>
                 <nav>
-                    <button id="btn-nav-contacts" class="nav-btn active">Contacts</button>
+                    <button id="btn-nav-dashboard" class="nav-btn active">Dashboard</button>
+                    <button id="btn-nav-contacts" class="nav-btn">Contacts</button>
                     <button id="btn-nav-companies" class="nav-btn">Companies</button>
                     <button id="btn-nav-tags" class="nav-btn">Manage Tags</button>
                     <button id="btn-add-contact" class="nav-btn primary">+ Add Contact</button>
@@ -46,8 +47,15 @@
 
         <main>
 
+            <!-- ==================== DASHBOARD VIEW ==================== -->
+            <div id="view-dashboard" class="view active">
+                <div id="dashboard-content">
+                    <div class="loading" style="padding:40px;text-align:center">Loading dashboard...</div>
+                </div>
+            </div>
+
             <!-- ==================== CONTACTS LIST VIEW ==================== -->
-            <div id="view-list" class="view active">
+            <div id="view-list" class="view">
                 <div class="toolbar">
                     <div class="toolbar-row">
                         <input type="text" id="search-input" placeholder="Search by name, email, phone, company, notes..." />
@@ -59,6 +67,7 @@
                             <button class="followup-btn" data-bucket="thisweek">Due This Week</button>
                             <button class="followup-btn" data-bucket="upcoming">Upcoming</button>
                         </div>
+                        <button id="btn-import-csv" class="btn-secondary btn-sm">&#8679; Import CSV</button>
                     </div>
                     <div id="tag-pills-row" class="tag-pills-row"></div>
                 </div>
@@ -243,6 +252,51 @@
                         <button id="btn-save-new-tag" class="btn-primary">Add Tag</button>
                     </div>
                     <div id="tags-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== IMPORT CSV MODAL ==================== -->
+        <div id="modal-import" class="modal-overlay hidden">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <h2>Import Contacts from CSV</h2>
+                    <button class="modal-close-btn" data-modal="modal-import">&times;</button>
+                </div>
+                <div class="modal-body">
+
+                    <!-- Step 1: Upload -->
+                    <div id="import-step-upload">
+                        <p class="import-hint">Upload a CSV file exported from Google Contacts, iPhone, LinkedIn, or any other source.</p>
+                        <div class="import-upload-area">
+                            <label for="import-csv-file" class="btn-primary import-file-label">Choose CSV File</label>
+                            <input type="file" id="import-csv-file" accept=".csv,.txt" style="display:none" />
+                            <span id="import-file-name" class="import-file-name">No file selected</span>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Map + Preview -->
+                    <div id="import-step-map" class="hidden">
+                        <p class="import-hint">Preview of first 5 rows. Map each column to a CRM field (or skip it).</p>
+                        <div id="import-preview-wrap" class="import-preview-wrap"></div>
+                        <table class="import-map-table">
+                            <thead><tr><th>CSV Column</th><th>Map to CRM Field</th></tr></thead>
+                            <tbody id="import-map-body"></tbody>
+                        </table>
+                        <div class="form-actions" style="margin-top:16px">
+                            <button type="button" class="btn-secondary" id="btn-import-back">Back</button>
+                            <button type="button" class="btn-primary" id="btn-import-run">Import Contacts</button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Result -->
+                    <div id="import-step-result" class="hidden">
+                        <div id="import-result-msg"></div>
+                        <div class="form-actions" style="margin-top:16px">
+                            <button type="button" class="btn-primary" id="btn-import-done">Done</button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
