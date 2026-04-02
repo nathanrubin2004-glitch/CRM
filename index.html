@@ -49,20 +49,28 @@
             <!-- ==================== CONTACTS LIST VIEW ==================== -->
             <div id="view-list" class="view active">
                 <div class="toolbar">
-                    <input type="text" id="search-input" placeholder="Search by name, email, phone, company..." />
-                    <select id="filter-tag">
-                        <option value="">All Tags</option>
-                    </select>
+                    <div class="toolbar-row">
+                        <input type="text" id="search-input" placeholder="Search by name, email, phone, company, notes..." />
+                        <select id="filter-company">
+                            <option value="">All Companies</option>
+                        </select>
+                        <div class="followup-filters">
+                            <button class="followup-btn" data-bucket="overdue">Overdue</button>
+                            <button class="followup-btn" data-bucket="thisweek">Due This Week</button>
+                            <button class="followup-btn" data-bucket="upcoming">Upcoming</button>
+                        </div>
+                    </div>
+                    <div id="tag-pills-row" class="tag-pills-row"></div>
                 </div>
                 <table class="data-table" id="contacts-table">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>Company</th>
-                            <th>Email</th>
-                            <th>Phone</th>
+                            <th data-sort="name" class="sortable">Name <span class="sort-arrow"></span></th>
+                            <th data-sort="company" class="sortable">Company <span class="sort-arrow"></span></th>
+                            <th data-sort="email" class="sortable">Email <span class="sort-arrow"></span></th>
+                            <th data-sort="phone" class="sortable">Phone <span class="sort-arrow"></span></th>
                             <th>Tags</th>
-                            <th>Follow-Up</th>
+                            <th data-sort="followUpDate" class="sortable">Follow-Up <span class="sort-arrow"></span></th>
                             <th>Actions</th>
                         </tr>
                     </thead>

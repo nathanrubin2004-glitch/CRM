@@ -166,8 +166,14 @@ main {
 /* ---- TOOLBAR ---- */
 .toolbar {
     display: flex;
-    gap: 10px;
+    flex-direction: column;
+    gap: 8px;
     margin-bottom: 12px;
+}
+
+.toolbar-row {
+    display: flex;
+    gap: 10px;
     align-items: center;
     flex-wrap: wrap;
 }
@@ -185,6 +191,91 @@ main {
 #company-search {
     flex: 1;
     min-width: 180px;
+}
+
+#filter-company {
+    min-width: 140px;
+}
+
+/* ---- FOLLOW-UP FILTER BUTTONS ---- */
+.followup-filters {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.followup-btn {
+    padding: 5px 11px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 12px;
+    background: white;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    white-space: nowrap;
+}
+
+.followup-btn:hover {
+    background: #e8edf5;
+    border-color: #aac;
+}
+
+.followup-btn.active {
+    background: #2c5aa0;
+    color: white;
+    border-color: #2c5aa0;
+}
+
+/* ---- TAG PILLS ROW ---- */
+.tag-pills-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    min-height: 0;
+}
+
+.tag-pill-btn {
+    padding: 3px 10px;
+    border: 1px solid #c5d4ef;
+    border-radius: 10px;
+    font-size: 12px;
+    background: #e2e9f8;
+    color: #2c5aa0;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    white-space: nowrap;
+}
+
+.tag-pill-btn:hover {
+    background: #cdd9f0;
+}
+
+.tag-pill-btn.active {
+    background: #2c5aa0;
+    color: white;
+    border-color: #2c5aa0;
+}
+
+/* ---- SORTABLE COLUMN HEADERS ---- */
+.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sortable:hover {
+    background: #d4dff0;
+}
+
+.sort-active {
+    background: #cdd9f0 !important;
+}
+
+.sort-arrow {
+    display: inline-block;
+    width: 12px;
+    font-size: 10px;
+    color: #2c5aa0;
 }
 
 /* ---- SHARED TABLE ---- */

@@ -21,6 +21,13 @@ let editingContactId  = null;
 let editingCompanyId  = null;
 let selectedCompanyId = null; // tracks autocomplete selection in contact form
 
+// ---- FILTER / SORT STATE ----
+let sortCol             = 'name';
+let sortDir             = 1;         // 1 = asc, -1 = desc
+let activeTagFilter     = '';
+let activeCompanyFilter = '';
+let activeFollowUpFilter = '';       // 'overdue' | 'thisweek' | 'upcoming' | ''
+
 // ---- VIEW SWITCHING ----
 function showView(id) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -64,14 +71,39 @@ async function loadTags() {
 }
 
 function populateTagFilter() {
-    const sel = document.getElementById('filter-tag');
-    const current = sel.value;
-    sel.innerHTML = '<option value="">All Tags</option>';
-    tags.forEach(t => {
+    populateTagPills();
+}
+
+function populateTagPills() {
+    const row = document.getElementById('tag-pills-row');
+    if (!row) return;
+    if (tags.length === 0) {
+        row.innerHTML = '';
+        return;
+    }
+    row.innerHTML = tags.map(t =>
+        `<button class="tag-pill-btn${activeTagFilter === t.name ? ' active' : ''}"
+            onclick="toggleTagPill('${escHtml(t.name)}')">${escHtml(t.name)}</button>`
+    ).join('');
+}
+
+function toggleTagPill(tagName) {
+    activeTagFilter = activeTagFilter === tagName ? '' : tagName;
+    populateTagPills();
+    renderTable();
+}
+
+function populateCompanyFilter() {
+    const sel = document.getElementById('filter-company');
+    if (!sel) return;
+    const current = activeCompanyFilter;
+    sel.innerHTML = '<option value="">All Companies</option>';
+    const names = [...new Set(contacts.map(c => getDisplayCompany(c)).filter(Boolean))].sort();
+    names.forEach(name => {
         const opt = document.createElement('option');
-        opt.value = t.name;
-        opt.textContent = t.name;
-        if (t.name === current) opt.selected = true;
+        opt.value = name;
+        opt.textContent = name;
+        if (name === current) opt.selected = true;
         sel.appendChild(opt);
     });
 }
@@ -419,6 +451,7 @@ async function loadContacts() {
     try {
         const snap = await db.collection('contacts').orderBy('name').get();
         contacts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        populateCompanyFilter();
         renderTable();
     } catch (err) {
         tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Error: ${escHtml(err.message)}</td></tr>`;
@@ -428,29 +461,65 @@ async function loadContacts() {
 function renderTable() {
     const tbody  = document.getElementById('contacts-tbody');
     const search = document.getElementById('search-input').value.toLowerCase().trim();
-    const tag    = document.getElementById('filter-tag').value;
+    const today  = todayDate();
+    const weekEnd = weekEndDate();
 
     const filtered = contacts.filter(c => {
         const coName = getDisplayCompany(c).toLowerCase();
+
         const matchSearch = !search ||
             (c.name  && c.name.toLowerCase().includes(search)) ||
             (c.email && c.email.toLowerCase().includes(search)) ||
             (c.phone && c.phone.toLowerCase().includes(search)) ||
-            coName.includes(search);
-        const matchTag = !tag || (Array.isArray(c.tags) && c.tags.includes(tag));
-        return matchSearch && matchTag;
+            coName.includes(search) ||
+            (c.notes && c.notes.toLowerCase().includes(search));
+
+        const matchTag = !activeTagFilter || (Array.isArray(c.tags) && c.tags.includes(activeTagFilter));
+
+        const matchCompany = !activeCompanyFilter || getDisplayCompany(c) === activeCompanyFilter;
+
+        let matchFollowUp = true;
+        if (activeFollowUpFilter === 'overdue') {
+            matchFollowUp = !!(c.followUpDate && c.followUpDate < today);
+        } else if (activeFollowUpFilter === 'thisweek') {
+            matchFollowUp = !!(c.followUpDate && c.followUpDate >= today && c.followUpDate <= weekEnd);
+        } else if (activeFollowUpFilter === 'upcoming') {
+            matchFollowUp = !!(c.followUpDate && c.followUpDate > weekEnd);
+        }
+
+        return matchSearch && matchTag && matchCompany && matchFollowUp;
     });
 
-    if (filtered.length === 0) {
+    const sorted = [...filtered].sort((a, b) => {
+        let aVal = sortCol === 'company' ? getDisplayCompany(a) : (a[sortCol] || '');
+        let bVal = sortCol === 'company' ? getDisplayCompany(b) : (b[sortCol] || '');
+        aVal = aVal.toString().toLowerCase();
+        bVal = bVal.toString().toLowerCase();
+        if (aVal < bVal) return -sortDir;
+        if (aVal > bVal) return sortDir;
+        return 0;
+    });
+
+    if (sorted.length === 0) {
         const msg = contacts.length === 0
             ? 'No contacts yet. Add your first one!'
             : 'No contacts match your filters.';
         tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${msg}</td></tr>`;
+        updateSortHeaders();
         return;
     }
 
-    const today = todayDate();
-    tbody.innerHTML = filtered.map(c => buildRow(c, today)).join('');
+    tbody.innerHTML = sorted.map(c => buildRow(c, today)).join('');
+    updateSortHeaders();
+}
+
+function updateSortHeaders() {
+    document.querySelectorAll('#contacts-table th[data-sort]').forEach(th => {
+        const col   = th.dataset.sort;
+        const arrow = th.querySelector('.sort-arrow');
+        if (arrow) arrow.textContent = col === sortCol ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+        th.classList.toggle('sort-active', col === sortCol);
+    });
 }
 
 function buildRow(c, today) {
@@ -726,7 +795,34 @@ document.getElementById('activity-note').addEventListener('keydown', e => {
 });
 
 document.getElementById('search-input').addEventListener('input', renderTable);
-document.getElementById('filter-tag').addEventListener('change', renderTable);
+
+document.getElementById('filter-company').addEventListener('change', e => {
+    activeCompanyFilter = e.target.value;
+    renderTable();
+});
+
+document.querySelectorAll('.followup-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const bucket = btn.dataset.bucket;
+        activeFollowUpFilter = activeFollowUpFilter === bucket ? '' : bucket;
+        document.querySelectorAll('.followup-btn').forEach(b => b.classList.remove('active'));
+        if (activeFollowUpFilter) btn.classList.add('active');
+        renderTable();
+    });
+});
+
+document.querySelectorAll('#contacts-table th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+        const col = th.dataset.sort;
+        if (sortCol === col) {
+            sortDir = -sortDir;
+        } else {
+            sortCol = col;
+            sortDir = 1;
+        }
+        renderTable();
+    });
+});
 
 // ========================================================
 // HELPERS
@@ -734,6 +830,13 @@ document.getElementById('filter-tag').addEventListener('change', renderTable);
 
 function todayDate() {
     const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function weekEndDate() {
+    const d = new Date();
+    const daysUntilSunday = d.getDay() === 0 ? 0 : 7 - d.getDay();
+    d.setDate(d.getDate() + daysUntilSunday);
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
