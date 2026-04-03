@@ -756,6 +756,23 @@ document.getElementById('contact-form').addEventListener('submit', async e => {
 
     const companyText = coTextInput.value.trim();
 
+    // If the user typed a company name without selecting an existing one,
+    // find or create a company record and link by ID.
+    if (companyText && !selectedCompanyId) {
+        const existing = companies.find(c => c.name.toLowerCase() === companyText.toLowerCase());
+        if (existing) {
+            selectedCompanyId = existing.id;
+        } else {
+            const newCoRef = await db.collection('companies').add({
+                name:      companyText,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            selectedCompanyId = newCoRef.id;
+            await loadCompanies();
+        }
+    }
+
     const data = {
         name:        document.getElementById('field-name').value.trim(),
         email:       document.getElementById('field-email').value.trim(),
@@ -763,7 +780,6 @@ document.getElementById('contact-form').addEventListener('submit', async e => {
         socialHandle:document.getElementById('field-social').value.trim(),
         currentRole: document.getElementById('field-current-role').value.trim(),
         howWeMet:    document.getElementById('field-how-met').value.trim(),
-        // If user selected from autocomplete, link by ID; otherwise store as plain text
         companyId:   selectedCompanyId || '',
         companyName: selectedCompanyId ? '' : companyText,
         tags:        getCheckedTags(),
