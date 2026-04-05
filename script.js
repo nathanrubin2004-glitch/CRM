@@ -510,6 +510,7 @@ function renderTable() {
             (c.phone       && c.phone.toLowerCase().includes(search)) ||
             coName.includes(search) ||
             (c.currentRole && c.currentRole.toLowerCase().includes(search)) ||
+            (c.location    && c.location.toLowerCase().includes(search)) ||
             (c.notes       && c.notes.toLowerCase().includes(search));
 
         const matchTag = !activeTagFilter || (Array.isArray(c.tags) && c.tags.includes(activeTagFilter));
@@ -637,6 +638,10 @@ async function viewContact(id) {
                     <div class="value">${escHtml(c.socialHandle || '—')}</div>
                 </div>
                 <div class="info-item">
+                    <label>Location</label>
+                    <div class="value">${escHtml(c.location || '—')}</div>
+                </div>
+                <div class="info-item">
                     <label>Follow-Up Date</label>
                     <div class="value ${overdue ? 'overdue' : ''}">${c.followUpDate ? fmtDate(c.followUpDate) + (overdue ? ' (OVERDUE)' : '') : '—'}</div>
                 </div>
@@ -740,6 +745,7 @@ function openEditContactModal(id) {
     document.getElementById('field-phone').value        = c.phone        || '';
     document.getElementById('field-social').value       = c.socialHandle || '';
     document.getElementById('field-current-role').value = c.currentRole  || '';
+    document.getElementById('field-location').value     = c.location     || '';
     document.getElementById('field-how-met').value      = c.howWeMet     || '';
     document.getElementById('field-followup').value = c.followUpDate || '';
     document.getElementById('field-notes').value    = c.notes        || '';
@@ -779,6 +785,7 @@ document.getElementById('contact-form').addEventListener('submit', async e => {
         phone:       document.getElementById('field-phone').value.trim(),
         socialHandle:document.getElementById('field-social').value.trim(),
         currentRole: document.getElementById('field-current-role').value.trim(),
+        location:    document.getElementById('field-location').value.trim(),
         howWeMet:    document.getElementById('field-how-met').value.trim(),
         companyId:   selectedCompanyId || '',
         companyName: selectedCompanyId ? '' : companyText,
