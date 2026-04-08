@@ -24,9 +24,13 @@ let selectedCompanyId = null; // tracks autocomplete selection in contact form
 // ---- FILTER / SORT STATE ----
 let sortCol             = 'name';
 let sortDir             = 1;         // 1 = asc, -1 = desc
-let activeTagFilter     = '';
-let activeCompanyFilter = '';
+let activeTagFilter      = '';
+let activeCompanyFilter  = '';
 let activeFollowUpFilter = '';       // 'overdue' | 'thisweek' | 'upcoming' | ''
+let activeLocationFilter = '';
+let activeHowWeMetFilter = '';
+let activeCurrRoleFilter = '';
+let activeSocialFilter   = '';
 
 // ---- IMPORT STATE ----
 let importHeaders = [];
@@ -141,6 +145,21 @@ function populateCompanyFilter() {
         opt.value = name;
         opt.textContent = name;
         if (name === current) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+function populateHowWeMetFilter() {
+    const sel = document.getElementById('filter-how-met');
+    if (!sel) return;
+    const current = activeHowWeMetFilter;
+    sel.innerHTML = '<option value="">All — How We Met</option>';
+    const values = [...new Set(contacts.map(c => c.howWeMet).filter(Boolean))].sort();
+    values.forEach(val => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = val;
+        if (val === current) opt.selected = true;
         sel.appendChild(opt);
     });
 }
@@ -489,6 +508,7 @@ async function loadContacts() {
         const snap = await db.collection('contacts').orderBy('name').get();
         contacts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         populateCompanyFilter();
+        populateHowWeMetFilter();
         renderTable();
     } catch (err) {
         tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Error: ${escHtml(err.message)}</td></tr>`;
@@ -526,7 +546,13 @@ function renderTable() {
             matchFollowUp = !!(c.followUpDate && c.followUpDate > weekEnd);
         }
 
-        return matchSearch && matchTag && matchCompany && matchFollowUp;
+        const matchLocation   = !activeLocationFilter || (c.location    && c.location.toLowerCase().includes(activeLocationFilter));
+        const matchHowWeMet   = !activeHowWeMetFilter || c.howWeMet === activeHowWeMetFilter;
+        const matchCurrRole   = !activeCurrRoleFilter || (c.currentRole && c.currentRole.toLowerCase().includes(activeCurrRoleFilter));
+        const matchSocial     = !activeSocialFilter   || (c.socialHandle && c.socialHandle.toLowerCase().includes(activeSocialFilter));
+
+        return matchSearch && matchTag && matchCompany && matchFollowUp &&
+               matchLocation && matchHowWeMet && matchCurrRole && matchSocial;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -540,6 +566,17 @@ function renderTable() {
     });
 
     selectedContactIds.clear();
+
+    // Show/hide Clear All button based on whether any filter is active
+    const clearBtn = document.getElementById('btn-clear-filters');
+    if (clearBtn) {
+        const anyActive = !!(
+            document.getElementById('search-input').value.trim() ||
+            activeTagFilter || activeCompanyFilter || activeFollowUpFilter ||
+            activeLocationFilter || activeHowWeMetFilter || activeCurrRoleFilter || activeSocialFilter
+        );
+        clearBtn.classList.toggle('hidden', !anyActive);
+    }
 
     if (sorted.length === 0) {
         const msg = contacts.length === 0
@@ -1591,6 +1628,49 @@ document.getElementById('filter-company').addEventListener('change', e => {
     activeCompanyFilter = e.target.value;
     renderTable();
 });
+
+document.getElementById('filter-location').addEventListener('input', e => {
+    activeLocationFilter = e.target.value.toLowerCase().trim();
+    renderTable();
+});
+
+document.getElementById('filter-how-met').addEventListener('change', e => {
+    activeHowWeMetFilter = e.target.value;
+    renderTable();
+});
+
+document.getElementById('filter-current-role').addEventListener('input', e => {
+    activeCurrRoleFilter = e.target.value.toLowerCase().trim();
+    renderTable();
+});
+
+document.getElementById('filter-social').addEventListener('input', e => {
+    activeSocialFilter = e.target.value.toLowerCase().trim();
+    renderTable();
+});
+
+document.getElementById('btn-clear-filters').addEventListener('click', clearAllFilters);
+
+function clearAllFilters() {
+    document.getElementById('search-input').value    = '';
+    document.getElementById('filter-company').value  = '';
+    document.getElementById('filter-location').value = '';
+    document.getElementById('filter-how-met').value  = '';
+    document.getElementById('filter-current-role').value = '';
+    document.getElementById('filter-social').value   = '';
+
+    activeTagFilter      = '';
+    activeCompanyFilter  = '';
+    activeFollowUpFilter = '';
+    activeLocationFilter = '';
+    activeHowWeMetFilter = '';
+    activeCurrRoleFilter = '';
+    activeSocialFilter   = '';
+
+    document.querySelectorAll('.followup-btn').forEach(b => b.classList.remove('active'));
+    populateTagPills();
+    renderTable();
+}
 
 document.querySelectorAll('.followup-btn').forEach(btn => {
     btn.addEventListener('click', () => {

@@ -197,6 +197,35 @@ main {
     min-width: 140px;
 }
 
+#filter-location,
+#filter-current-role,
+#filter-social {
+    min-width: 160px;
+    flex: 1;
+}
+
+#filter-how-met {
+    min-width: 160px;
+}
+
+.btn-clear-filters {
+    padding: 5px 11px;
+    border: 1px solid #c0392b;
+    border-radius: 3px;
+    font-size: 12px;
+    background: white;
+    color: #c0392b;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s, color 0.12s;
+    margin-left: auto;
+}
+
+.btn-clear-filters:hover {
+    background: #c0392b;
+    color: white;
+}
+
 /* ---- FOLLOW-UP FILTER BUTTONS ---- */
 .followup-filters {
     display: flex;
