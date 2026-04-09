@@ -531,6 +531,7 @@ function renderTable() {
             coName.includes(search) ||
             (c.currentRole && c.currentRole.toLowerCase().includes(search)) ||
             (c.location    && c.location.toLowerCase().includes(search)) ||
+            (c.website     && c.website.toLowerCase().includes(search)) ||
             (c.notes       && c.notes.toLowerCase().includes(search));
 
         const matchTag = !activeTagFilter || (Array.isArray(c.tags) && c.tags.includes(activeTagFilter));
@@ -675,6 +676,10 @@ async function viewContact(id) {
                     <div class="value">${escHtml(c.socialHandle || '—')}</div>
                 </div>
                 <div class="info-item">
+                    <label>Website</label>
+                    <div class="value">${c.website ? `<a href="${escHtml(c.website)}" target="_blank" rel="noopener">${escHtml(c.website.replace(/^https?:\/\//, ''))}</a>` : '—'}</div>
+                </div>
+                <div class="info-item">
                     <label>Location</label>
                     <div class="value">${escHtml(c.location || '—')}</div>
                 </div>
@@ -783,6 +788,7 @@ function openEditContactModal(id) {
     document.getElementById('field-social').value       = c.socialHandle || '';
     document.getElementById('field-current-role').value = c.currentRole  || '';
     document.getElementById('field-location').value     = c.location     || '';
+    document.getElementById('field-website').value      = c.website      || '';
     document.getElementById('field-how-met').value      = c.howWeMet     || '';
     document.getElementById('field-followup').value = c.followUpDate || '';
     document.getElementById('field-notes').value    = c.notes        || '';
@@ -823,6 +829,7 @@ document.getElementById('contact-form').addEventListener('submit', async e => {
         socialHandle:document.getElementById('field-social').value.trim(),
         currentRole: document.getElementById('field-current-role').value.trim(),
         location:    document.getElementById('field-location').value.trim(),
+        website:     document.getElementById('field-website').value.trim(),
         howWeMet:    document.getElementById('field-how-met').value.trim(),
         companyId:   selectedCompanyId || '',
         companyName: selectedCompanyId ? '' : companyText,
